@@ -706,7 +706,7 @@ export class Sim {
       return;
     }
     this.score += SCORE.roundMark;
-    this.addPopup(`${obj.label} ✓`, SCORE.roundMark);
+    this.addPopup(obj.label, SCORE.roundMark);
     const next = this.objectives[this.targetIdx];
     this.setCoach(
       "rounded",
@@ -801,7 +801,7 @@ export class Sim {
       lines.push("Three stars — clean and quick. You've got this.");
     } else if (clean) {
       lines.push(
-        "Clean run! Trim a little sharper and beat the par time for ★★★."
+        "Clean run! Trim a little sharper and beat the par time for 3 stars."
       );
     }
     if (this.capsizeCount > 0) {

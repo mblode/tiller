@@ -4,8 +4,10 @@ import {
   AnchorIcon,
   ArrowRightIcon,
   LockIcon,
+  PauseIcon,
   PlayIcon,
   RotateCcwIcon,
+  XIcon,
 } from "blode-icons-react";
 import Image from "next/image";
 import {
@@ -194,11 +196,11 @@ export function GameShell() {
 
             <button
               aria-label="Pause game"
-              className="absolute top-[4.75rem] left-2 z-30 flex h-11 w-11 items-center justify-center rounded-full bg-black/45 font-pixel text-[10px] text-sky-100 backdrop-blur-sm"
+              className="absolute top-[4.75rem] left-2 z-30 flex h-11 w-11 items-center justify-center rounded-full bg-black/45 text-sky-100 backdrop-blur-sm"
               onClick={togglePause}
               type="button"
             >
-              ❚❚
+              <PauseIcon aria-hidden className="size-4" />
             </button>
 
             {booting ? (
@@ -243,8 +245,8 @@ export function GameShell() {
                     <h2 className="mt-1 font-pixel text-xl text-amber-200 drop-shadow-[2px_2px_0_rgba(0,0,0,0.5)]">
                       {hud.result.finished ? "Level Clear!" : "Race Over"}
                     </h2>
-                    <div className="mt-2 text-4xl">
-                      <Stars count={hud.result.stars} />
+                    <div className="mt-2">
+                      <Stars className="size-7" count={hud.result.stars} />
                     </div>
                     <div className="mt-2 font-pixel text-3xl text-sky-50">
                       {hud.result.total}
@@ -493,7 +495,7 @@ function LevelSelect({
           onClick={onBack}
           type="button"
         >
-          ✕
+          <XIcon aria-hidden className="size-4" />
         </button>
       </div>
       <ul className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
@@ -632,7 +634,7 @@ function Sheet({
           onClick={onClose}
           type="button"
         >
-          ✕
+          <XIcon aria-hidden className="size-4" />
         </button>
       </div>
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">

@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  AnchorIcon,
+  ArrowLeftRightIcon,
+  ArrowUpRightIcon,
+} from "blode-icons-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { GameBridge } from "@/game/bridge";
@@ -133,7 +138,7 @@ export function Controls({
                 : "left 220ms cubic-bezier(.22,1,.36,1)",
             }}
           >
-            <span className="font-pixel text-base text-amber-200">⇆</span>
+            <ArrowLeftRightIcon aria-hidden className="size-4 text-amber-200" />
           </div>
         </div>
       </div>
@@ -152,7 +157,7 @@ export function Controls({
           }}
           type="button"
         >
-          <span className="text-base">⇄</span>
+          <ArrowLeftRightIcon aria-hidden className="size-4" />
           CROSS
         </button>
         <button
@@ -169,7 +174,7 @@ export function Controls({
           onPointerUp={() => setHiking(false)}
           type="button"
         >
-          <span className="text-base">🏋</span>
+          <ArrowUpRightIcon aria-hidden className="size-4" />
           HIKE
         </button>
       </div>
@@ -216,7 +221,7 @@ export function Controls({
               top: `${sheet * 100}%`,
             }}
           >
-            <span className="font-pixel text-xs text-white">⛵</span>
+            <AnchorIcon aria-hidden className="size-4 text-white" />
           </div>
         </div>
       </div>

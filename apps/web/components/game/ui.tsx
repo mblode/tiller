@@ -3,6 +3,7 @@
 // look in one place; the visual tokens themselves live in app/globals.css
 // (.pixel-panel / .pixel-inset / .chart-grid / .btn-brass).
 
+import { StarIcon } from "blode-icons-react";
 import type { ReactNode } from "react";
 
 /** Translucent beveled HUD chip — shared class list for in-game status pills. */
@@ -23,11 +24,28 @@ export function PixelPanel({
 }
 
 /** Earned stars out of `total`; filled in brass, the rest dim. */
-export function Stars({ count, total = 3 }: { count: number; total?: number }) {
+export function Stars({
+  count,
+  total = 3,
+  className = "size-4",
+}: {
+  count: number;
+  total?: number;
+  className?: string;
+}) {
   return (
-    <span className="drop-shadow-[0_1px_0_rgba(0,0,0,0.4)]">
-      <span className="text-amber-300">{"★".repeat(count)}</span>
-      <span className="text-sky-100/15">{"★".repeat(total - count)}</span>
+    <span className="inline-flex items-center gap-0.5 align-middle">
+      {Array.from({ length: total }, (_, i) => (
+        <StarIcon
+          aria-hidden
+          className={
+            i < count
+              ? `${className} fill-amber-300 text-amber-300 drop-shadow-[0_1px_0_rgba(0,0,0,0.4)]`
+              : `${className} fill-sky-100/10 text-sky-100/15`
+          }
+          key={`star-${i}`}
+        />
+      ))}
     </span>
   );
 }
