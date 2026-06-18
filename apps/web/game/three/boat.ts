@@ -229,11 +229,13 @@ export class BoatModel {
     // yaw: heading 0 = forward(-Z); flip sign so the bow points where you sail
     this.group.rotation.y = -p.heading * DEG2RAD;
 
-    const luffing = p.sailState === "IN_IRONS" || p.tack === "HEAD_TO_WIND";
+    // boom swings free only when truly head-to-wind / in irons
+    const hardLuff = p.sailState === "IN_IRONS" || p.tack === "HEAD_TO_WIND";
+    const luff = Math.min(1, Math.max(0, p.luff));
     // leeward side: wind over starboard (STARBOARD tack) -> boom to port (-X)
     const lee = p.tack === "STARBOARD" ? -1 : 1;
     const sheetAngle = BOOM_MIN + (1 - p.sheet) * (BOOM_MAX - BOOM_MIN);
-    const desired = luffing ? Math.sin(p.nowMs / 90) * 10 : lee * sheetAngle;
+    const desired = hardLuff ? Math.sin(p.nowMs / 90) * 10 : lee * sheetAngle;
     let tau = 0.18;
     if (p.sailState === "CRASH_GYBE") {
       tau = 0.05;
@@ -251,12 +253,13 @@ export class BoatModel {
     this.mainPivot.rotation.y = rot;
     this.jibPivot.rotation.y = rot * 0.7;
 
-    // Sail feedback: luffing -> strong, fast flutter and a near-flat sail so the
-    // player reads "stalled, bear away". Drawing -> taut, full belly to leeward.
-    const flutterAmp = luffing ? 0.55 : 0;
+    // Sail feedback: flutter and belly ramp continuously with luff so the player
+    // reads "easing off, bear away/sheet in" *before* the sail fully stalls.
+    // luff 0 -> taut, full belly to leeward; luff 1 -> flat, fast flapping.
+    const flutterAmp = 0.55 * luff;
     const mainFlutter = flutterAmp * Math.sin(p.nowMs / 38);
     const jibFlutter = flutterAmp * Math.sin(p.nowMs / 33 + 1.1);
-    const bellyX = (luffing ? 0.08 : 0.95) * (this.boomLateral >= 0 ? 1 : -1);
+    const bellyX = (0.95 - 0.87 * luff) * (this.boomLateral >= 0 ? 1 : -1);
     this.main.setShape(bellyX, mainFlutter);
     this.jib.setShape(bellyX * 0.7, jibFlutter);
 
@@ -299,7 +302,7 @@ export class BoatModel {
     this.rig.rotation.z = this.heel * (1 - this.capsizeRoll / (90 * DEG2RAD));
 
     // flag streams downwind (cosmetic); flaps harder when luffing
-    const flagWobble = luffing ? Math.sin(p.nowMs / 50) * 0.4 : 0;
+    const flagWobble = hardLuff ? Math.sin(p.nowMs / 50) * 0.4 : 0;
     this.flag.rotation.y =
       rot * 0.5 + Math.sin(p.nowMs / 120) * 0.1 + flagWobble;
   }

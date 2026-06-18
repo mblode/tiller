@@ -1,5 +1,3 @@
-export type GameMode = "practice" | "race";
-
 export type SailState =
   | "SAILING"
   | "TACKING"
@@ -20,6 +18,13 @@ export interface GameInput {
 
 export type CrewSide = -1 | 1; // -1 = port rail, +1 = starboard rail
 
+/** A short-lived floating "+90 / -100" chip the HUD animates over each event. */
+export interface ScorePopup {
+  id: number;
+  text: string;
+  points: number;
+}
+
 /** A circular collision obstacle in world metres (beach/breakwater/dock/baths). */
 export interface Obstacle {
   x: number;
@@ -32,6 +37,7 @@ export interface BoatView {
   heading: number;
   tack: Tack;
   sheet: number;
+  luff: number; // sail flap [0,1]: 0 = drawing full, 1 = stalled/flapping
   sailState: SailState;
   crewSide: CrewSide; // which rail the crew sits on (windward)
   hiking: boolean; // crew leaning out
@@ -43,8 +49,13 @@ export interface BoatView {
 
 /** Snapshot the Phaser scene publishes to the React HUD (throttled). */
 export interface HudState {
-  mode: GameMode;
   running: boolean;
+  // current level
+  levelId: number;
+  levelName: string;
+  objectiveIndex: number; // how many objectives are done (0..total)
+  objectiveTotal: number;
+  showWedge: boolean; // whether the no-go wedge is taught/drawn this level
   windDir: number;
   windSpeedKt: number;
   headingDeg: number;
@@ -74,11 +85,19 @@ export interface HudState {
   needCross: boolean; // true mid tack/gybe: prompt the player to cross sides
   mobBearingDeg: number | null; // person-overboard guidance (null = none active)
   mobDistM: number | null;
+  // drowned-passenger rescue objectives scattered in open water
+  rescuedCount: number;
+  rescueTotal: number;
+  rescueBearingDeg: number | null; // nearest un-rescued swimmer (null = none left)
+  rescueDistM: number | null;
+  // transient floating score chips, freshest last
+  popups: ScorePopup[];
   result: RaceResult | null;
 }
 
 export interface RaceResult {
   finished: boolean;
+  levelId: number;
   total: number;
   stars: number;
   elapsed: number;

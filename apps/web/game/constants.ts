@@ -20,6 +20,11 @@ export const NO_GO_HALF = 43; // degrees
 export const GYBE_ZONE = 170;
 export const HEAD_TO_WIND_DEADBAND = 3;
 
+// Luff cue: how much the sail visibly flaps as a warning before stalling
+export const LUFF_WARN_BAND = 12; // deg above NO_GO_HALF where flutter begins (~55°)
+export const LUFF_TRIM_DEADBAND = 0.08; // sheet-eased slack before the sail luffs
+export const LUFF_TRIM_BAND = 0.5; // sheet-eased range over which luff ramps 0→1
+
 // Steering (the inverted tiller)
 export const MAX_TURN_RATE = 70; // deg/s
 export const SPEED_FULL_AUTHORITY = 4; // kt
@@ -82,6 +87,36 @@ export const CRASH_SPEED_KEEP = 0.6;
 export const CRASH_LOCKOUT_MS = 400;
 export const CRASH_GYBE_MIN_SPEED = 4;
 
+// Roll tack / gybe: crossing to the new windward rail as the turn completes
+// flattens the boat and drives it forward, nearly cancelling the exit-speed
+// loss. Reward a well-timed cross (within the window of completion).
+export const ROLL_WINDOW_MS = 1400; // how recent the cross must be to count
+export const ROLL_BOOST = 1.12; // exit-speed multiplier for a clean roll
+
+// Tack / gybe grading — a rolled turn (clean crew cross) always grades "clean";
+// otherwise grade on how much boat speed survived the turn. The crew left on the
+// wrong rail through the turn costs a small penalty.
+export const MANEUVER = {
+  cleanSpeedKeep: 0.78, // exit/entry speed ratio >= → "clean"
+  gybe: { clean: 90, ok: 45, sloppy: 15 },
+  okSpeedKeep: 0.5, // ratio >= → "ok", otherwise "sloppy"
+  tack: { clean: 90, ok: 45, sloppy: 15 },
+  wrongRailPenalty: -20, // crew caught on the wrong (leeward) side at completion
+} as const;
+
+// Drowned-passenger rescue objectives (sail within radius to collect).
+export const RESCUE = { points: 150, radius: 7 } as const;
+
+// Hand-placed in OPEN water only — the harbour + obstacles all live east of
+// x ≈ 30, so these sit in the western/central course corridor.
+export const RESCUE_SPAWNS: readonly { x: number; y: number }[] = [
+  { x: -30, y: 20 },
+  { x: 15, y: 70 },
+  { x: -45, y: -40 },
+  { x: 10, y: 120 },
+  { x: -15, y: -80 },
+];
+
 // Scoring
 export const SCORE = {
   crashGybeFlat: -100,
@@ -92,6 +127,7 @@ export const SCORE = {
   ironsPerSec: -10,
   noGoPerSec: -3,
   offCourseFlat: -75,
+  roll: 40,
   roundMark: 250,
   start: 100,
   tack: 75,

@@ -24,6 +24,10 @@ export const GLOSSARY: GlossaryEntry[] = [
     term: "Jib",
   },
   {
+    def: "You sail a two-person dinghy: a helm on the tiller and a crew. Their weight on the windward rail keeps her flat — cross sides through every tack and gybe.",
+    term: "Crew",
+  },
+  {
     def: "The ~43° wedge either side of straight upwind where you can't sail — the sail just flaps. Steer out of it.",
     term: "No-go zone",
   },

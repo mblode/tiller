@@ -5,6 +5,9 @@ import {
   BOOM_MAX,
   BOOM_MIN,
   HULL_MAX_KT,
+  LUFF_TRIM_BAND,
+  LUFF_TRIM_DEADBAND,
+  LUFF_WARN_BAND,
   NO_GO_HALF,
   OPTIMAL_BOOM_FACTOR,
   POLAR,
@@ -125,6 +128,27 @@ export function trimEfficiency(sheet: number, aTwa: number): number {
   }
   const x = Math.abs(err) / tol;
   return Math.max(TRIM_EFF_FLOOR, Math.exp(-0.5 * x * x));
+}
+
+/**
+ * How much the sail is luffing [0,1]: 0 = drawing full, 1 = stalled/flapping.
+ * Driven by pinch (heading too high) and by easing the sheet too far. Over-
+ * sheeting does not luff — that's a stall, already penalised by trimEfficiency.
+ */
+export function luffFactor(aTwa: number, sheet: number): number {
+  // Pinch: leading edge backwinds as aTwa drops toward the no-go boundary.
+  const pinch = clamp(
+    (NO_GO_HALF + LUFF_WARN_BAND - aTwa) / LUFF_WARN_BAND,
+    0,
+    1
+  );
+  // Under-trim: easing the sheet below optimal for this point of sail luffs it.
+  const eased = clamp(
+    (optimalSheet(aTwa) - sheet - LUFF_TRIM_DEADBAND) / LUFF_TRIM_BAND,
+    0,
+    1
+  );
+  return Math.max(pinch, eased);
 }
 
 /** Steering authority [0,1] as a function of boat speed. */

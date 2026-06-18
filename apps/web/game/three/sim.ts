@@ -6,7 +6,6 @@ import type { GameBridge } from "../bridge";
 import {
   ACCEL_TAU,
   BACK_SAIL_RATE,
-  COURSE,
   CRASH_GYBE_MIN_SPEED,
   DECEL_TAU,
   DEG2RAD,
@@ -16,9 +15,14 @@ import {
   IRONS_SPEED,
   IRONS_STERNWAY_MAX,
   KT_TO_MS,
+  MANEUVER,
   MAX_TURN_RATE,
   NO_GO_HALF,
+  RESCUE,
+  RESCUE_SPAWNS,
   REVERSE_AUTHORITY_REF,
+  ROLL_BOOST,
+  ROLL_WINDOW_MS,
   SCORE,
   SHEET_IN_THRESHOLD,
   STALL_HOLD,
@@ -29,10 +33,12 @@ import {
   TACK_DRAG,
   TACK_EXIT_SPEED_KEEP,
   TRIM_GOOD,
-  TWS_DEFAULT,
 } from "../constants";
+import { FIRST_LEVEL_ID, levelById } from "../levels";
+import type { LevelDef, Objective } from "../levels";
 import {
   clamp,
+  luffFactor,
   optimalSheet,
   pointOfSailName,
   signedTWA,
@@ -43,13 +49,17 @@ import {
 } from "../sailing";
 import type {
   CrewSide,
-  GameMode,
   HudState,
   Obstacle,
   RaceResult,
   SailState,
+  ScorePopup,
   Tack,
 } from "../types";
+
+/** How a tack/gybe was executed, for graded scoring + feedback. */
+type ManeuverGrade = "clean" | "ok" | "sloppy";
+const POPUP_TTL_MS = 1500;
 
 const RAD2DEG = 180 / Math.PI;
 const PUBLISH_MS = 90;
@@ -61,8 +71,6 @@ const CAPSIZE_PENALTY = -80;
 const RESCUE_POINTS = 120;
 const CAPSIZE_RECOVER_MS = 2600;
 
-export type Target = "WM" | "LM" | "FINISH";
-
 export interface Derived {
   sTwa: number;
   aTwa: number;
@@ -71,6 +79,7 @@ export interface Derived {
   trimEff: number;
   optSheet: number;
   pointOfSail: string;
+  luff: number; // sail flap [0,1]: 0 = drawing full, 1 = stalled/flapping
 }
 
 export interface Boat {
@@ -83,28 +92,19 @@ export interface Boat {
   tillerLockedUntil: number;
   bufferedTiller: number;
   entrySign: number;
+  entrySpeed: number; // boat speed (kt) captured when a tack/gybe began
   stallTimer: number;
   capsizeUntil: number;
 }
 
-export function markFor(target: Target): { x: number; y: number } | null {
-  if (target === "WM") {
-    return COURSE.windwardMark;
+function gradeLabel(grade: ManeuverGrade): string {
+  if (grade === "clean") {
+    return "Clean";
   }
-  if (target === "LM") {
-    return COURSE.leewardMark;
+  if (grade === "ok") {
+    return "OK";
   }
-  return null;
-}
-
-function labelFor(target: Target): string {
-  if (target === "WM") {
-    return "Windward mark";
-  }
-  if (target === "LM") {
-    return "Leeward mark";
-  }
-  return "Finish";
+  return "Sloppy";
 }
 
 function tackFor(sTwa: number, aTwa: number): Tack {
@@ -115,9 +115,9 @@ function tackFor(sTwa: number, aTwa: number): Tack {
 }
 
 export class Sim {
-  mode: GameMode = "practice";
-  windDir = COURSE.windDir;
-  windSpeed = TWS_DEFAULT;
+  level: LevelDef = levelById(FIRST_LEVEL_ID);
+  windDir = this.level.windDir;
+  windSpeed = this.level.windSpeedKt;
   running = false;
   result: RaceResult | null = null;
   /** Set on a crash gybe / capsize; renderer shakes the camera while now < shakeUntil. */
@@ -128,11 +128,14 @@ export class Sim {
   heel = 0; // signed lean, + = heeled to leeward
   /** Person-overboard to rescue (world metres), or null. */
   mob: { x: number; y: number } | null = null;
+  /** Drowned-passenger rescue objectives scattered in open water. */
+  rescues: { x: number; y: number; picked: boolean }[] = [];
 
   boat: Boat = {
     bufferedTiller: 0,
     capsizeUntil: 0,
     entrySign: 1,
+    entrySpeed: 0,
     heading: 90,
     omega: 0,
     speedKt: 0,
@@ -145,6 +148,7 @@ export class Sim {
 
   derived: Derived = {
     aTwa: 0,
+    luff: 1,
     optSheet: 0.5,
     pointOfSail: "In irons",
     sTwa: 0,
@@ -153,7 +157,7 @@ export class Sim {
     trimEff: 0,
   };
 
-  targets: Target[] = [];
+  objectives: Objective[] = [];
   targetIdx = 0;
 
   private bridge: GameBridge;
@@ -170,7 +174,7 @@ export class Sim {
   private streakSec = 0;
   private didFirstTack = false;
   private didFirstGybe = false;
-  private finishedLM = false;
+  private capsizeCount = 0;
   private coach: string | null = null;
   private coachUntil = 0;
   private coachKey = "";
@@ -178,8 +182,11 @@ export class Sim {
   private prevSign = 1;
   private lastPublish = 0;
   private lastRestart = 0;
-  private lastModeReq: GameMode | null = null;
   private lastCross = 0;
+  private popups: { id: number; text: string; points: number; born: number }[] =
+    [];
+  private popupSeq = 0;
+  private lastCrossAt = -1e9; // nowMs of the last crew cross-over
   private obstacles: Obstacle[] = [];
 
   setObstacles(obstacles: Obstacle[]) {
@@ -197,28 +204,34 @@ export class Sim {
 
   constructor(bridge: GameBridge) {
     this.bridge = bridge;
-    this.startMode(bridge.command.setMode ?? "practice");
-    this.lastModeReq = bridge.command.setMode;
+    this.level = levelById(bridge.command.levelId);
+    this.start();
     this.lastRestart = bridge.command.restart;
     this.lastCross = bridge.command.crossSide;
   }
 
-  startMode(mode: GameMode) {
-    this.mode = mode;
-    this.windDir = COURSE.windDir;
-    this.windSpeed = TWS_DEFAULT;
+  /** Load a level definition; takes effect on the next start(). */
+  setLevel(id: number) {
+    this.level = levelById(id);
+  }
+
+  start() {
+    const lvl = this.level;
+    this.windDir = lvl.windDir;
+    this.windSpeed = lvl.windSpeedKt;
     this.boat = {
       bufferedTiller: 0,
       capsizeUntil: 0,
       entrySign: 1,
-      heading: mode === "race" ? 45 : 90,
+      entrySpeed: 0,
+      heading: lvl.start.heading,
       omega: 0,
-      speedKt: mode === "race" ? 2 : 3,
+      speedKt: lvl.start.speedKt,
       stallTimer: 0,
       state: "SAILING",
       tillerLockedUntil: 0,
-      x: 0,
-      y: COURSE.startLineY - 6,
+      x: lvl.start.x,
+      y: lvl.start.y,
     };
     this.score = 0;
     this.elapsed = 0;
@@ -226,6 +239,7 @@ export class Sim {
     this.tackCount = 0;
     this.gybeCount = 0;
     this.crashGybes = 0;
+    this.capsizeCount = 0;
     this.ironsPenaltyThisEpisode = 0;
     this.trimSum = 0;
     this.trimSamples = 0;
@@ -233,16 +247,22 @@ export class Sim {
     this.streakSec = 0;
     this.didFirstTack = false;
     this.didFirstGybe = false;
-    this.finishedLM = false;
-    this.coach = null;
-    this.coachUntil = 0;
-    this.coachKey = "";
+    // Open each level with its own orientation line so the player knows the one
+    // new thing this level is teaching before they touch the controls.
+    this.coach = lvl.introCoach;
+    this.coachUntil = this.now + 6500;
+    this.coachKey = "intro";
     this.shakeUntil = 0;
     this.heel = 0;
+    this.lastCrossAt = -1e9;
     this.mob = null;
+    this.popups = [];
+    this.rescues = lvl.assists.noRescues
+      ? []
+      : RESCUE_SPAWNS.map((s) => ({ picked: false, x: s.x, y: s.y }));
     // start the crew on the correct (windward) rail for the opening heading
     this.crewSide = signedTWA(this.boat.heading, this.windDir) >= 0 ? 1 : -1;
-    this.targets = mode === "race" ? ["WM", "LM", "FINISH"] : [];
+    this.objectives = lvl.objectives;
     this.targetIdx = 0;
     this.running = true;
   }
@@ -261,6 +281,7 @@ export class Sim {
     this.stepPhysics(dt, nowMs);
     this.stepCrew(dt);
     this.stepRescue();
+    this.stepPassengers();
     this.stepCourse();
     this.stepScoring(dt);
     this.stepCoach(nowMs);
@@ -297,6 +318,7 @@ export class Sim {
     if (c !== this.lastCross) {
       this.lastCross = c;
       this.crewSide = this.crewSide === 1 ? -1 : 1;
+      this.lastCrossAt = this.now;
     }
     const sailing = b.state === "SAILING" && !this.capsized;
     const wind = this.windSide();
@@ -318,20 +340,24 @@ export class Sim {
     }
     this.heel += (targetHeel - this.heel) * Math.min(1, 4 * dt);
 
-    if (!this.capsized && Math.abs(this.heel) > CAPSIZE_HEEL) {
+    if (
+      !this.capsized &&
+      !this.level.assists.noCapsize &&
+      Math.abs(this.heel) > CAPSIZE_HEEL
+    ) {
       this.capsize();
     }
   }
 
   private capsize() {
     const b = this.boat;
+    this.capsizeCount += 1;
     b.capsizeUntil = this.now + CAPSIZE_RECOVER_MS;
     b.speedKt = 0;
     this.shakeUntil = this.now + 220;
     this.mob = { x: b.x, y: b.y }; // crew overboard at the capsize spot
-    if (this.mode === "race") {
-      this.score = Math.max(0, this.score + CAPSIZE_PENALTY);
-    }
+    this.score = Math.max(0, this.score + CAPSIZE_PENALTY);
+    this.addPopup("Capsized", CAPSIZE_PENALTY);
     this.setCoach(
       "capsize",
       "Capsized! Right the boat, then sail back for your crew in the water.",
@@ -347,24 +373,47 @@ export class Sim {
     const d = Math.hypot(this.mob.x - b.x, this.mob.y - b.y);
     if (!this.capsized && d < MOB_RADIUS) {
       this.mob = null;
-      if (this.mode === "race") {
-        this.score += RESCUE_POINTS;
-      }
+      this.score += RESCUE_POINTS;
+      this.addPopup("Crew aboard", RESCUE_POINTS);
       this.setCoach("rescued", "Crew aboard — great rescue! Back to it.", 2600);
     }
   }
 
-  private drainCommands() {
-    const c = this.bridge.command;
-    if (c.setMode && c.setMode !== this.lastModeReq) {
-      this.lastModeReq = c.setMode;
-      this.lastRestart = c.restart;
-      this.startMode(c.setMode);
+  /** Collect drowned-passenger objectives by sailing within range. */
+  private stepPassengers() {
+    if (this.capsized) {
       return;
     }
+    const b = this.boat;
+    for (const p of this.rescues) {
+      if (p.picked) {
+        continue;
+      }
+      if (Math.hypot(p.x - b.x, p.y - b.y) < RESCUE.radius) {
+        p.picked = true;
+        this.score += RESCUE.points;
+        this.addPopup("Rescue!", RESCUE.points);
+        this.setCoach(
+          "passenger",
+          "Sailor aboard — nice pickup! Get them safely round.",
+          2600
+        );
+      }
+    }
+  }
+
+  /** Queue a transient floating "+90 / -100" chip for the HUD. */
+  private addPopup(text: string, points: number) {
+    this.popupSeq += 1;
+    this.popups.push({ born: this.now, id: this.popupSeq, points, text });
+  }
+
+  private drainCommands() {
+    const c = this.bridge.command;
     if (c.restart !== this.lastRestart) {
       this.lastRestart = c.restart;
-      this.startMode(this.mode);
+      this.setLevel(c.levelId);
+      this.start();
     }
   }
 
@@ -398,7 +447,11 @@ export class Sim {
 
     const sTwa = signedTWA(b.heading, this.windDir);
     const aTwa = Math.abs(sTwa);
-    const sheet = clamp(input.sheet, 0, 1);
+    // autoTrim levels work the sail for the player: it sits at optimal so the
+    // only thing to learn this level is steering.
+    const sheet = this.level.assists.autoTrim
+      ? optimalSheet(aTwa)
+      : clamp(input.sheet, 0, 1);
 
     let target = targetSpeedKt(aTwa, sheet, this.windSpeed);
     if (aTwa < NO_GO_HALF && b.speedKt < STERNWAY_TRIGGER_SPEED) {
@@ -423,8 +476,15 @@ export class Sim {
 
     this.stepStateMachine(b, sTwa, aTwa, sheet, dt, time);
 
+    // Sail flap cue: graded everywhere, forced full when truly stalled/in irons.
+    let luff = luffFactor(aTwa, sheet);
+    if (b.state === "IN_IRONS" || aTwa <= HEAD_TO_WIND_DEADBAND) {
+      luff = 1;
+    }
+
     this.derived = {
       aTwa,
+      luff,
       optSheet: optimalSheet(aTwa),
       pointOfSail: pointOfSailName(aTwa),
       sTwa,
@@ -453,10 +513,12 @@ export class Sim {
       if (aTwa < NO_GO_HALF) {
         b.state = "TACKING";
         b.entrySign = this.prevSign;
+        b.entrySpeed = b.speedKt;
         b.stallTimer = 0;
       } else if (aTwa > GYBE_ZONE) {
         b.state = "GYBING";
         b.entrySign = this.prevSign;
+        b.entrySpeed = b.speedKt;
       }
     } else if (b.state === "TACKING") {
       if (b.speedKt < IRONS_SPEED && Math.abs(b.omega) < STALL_RATE) {
@@ -470,7 +532,14 @@ export class Sim {
       if (sign !== b.entrySign && aTwa > NO_GO_HALF) {
         b.state = "SAILING";
         b.speedKt *= TACK_EXIT_SPEED_KEEP;
-        this.onTackComplete();
+        // sign is the new windward side: a crew already there from a recent
+        // cross means a clean roll tack → drive the boat out of the turn.
+        const windward: CrewSide = sign >= 0 ? 1 : -1;
+        const rolled = this.rolledWell(windward);
+        if (rolled) {
+          b.speedKt *= ROLL_BOOST;
+        }
+        this.onTackComplete(rolled, windward);
       }
     } else if (b.state === "IN_IRONS") {
       if (aTwa > NO_GO_HALF && b.speedKt > IRONS_SPEED) {
@@ -494,17 +563,26 @@ export class Sim {
   ) {
     if (crossedStern) {
       const controlled =
-        sheet >= SHEET_IN_THRESHOLD || b.speedKt < CRASH_GYBE_MIN_SPEED;
+        this.level.assists.noCrashGybe ||
+        sheet >= SHEET_IN_THRESHOLD ||
+        b.speedKt < CRASH_GYBE_MIN_SPEED;
       if (controlled) {
         b.state = "SAILING";
         b.speedKt *= 0.95;
         b.tillerLockedUntil = time + 250;
-        this.onGybe(false);
+        const ws: CrewSide = signedTWA(b.heading, this.windDir) >= 0 ? 1 : -1;
+        const rolled = this.rolledWell(ws);
+        if (rolled) {
+          b.speedKt *= ROLL_BOOST;
+        }
+        this.onGybe(false, rolled, ws);
       } else {
         b.state = "CRASH_GYBE";
         b.speedKt *= 0.6;
         b.tillerLockedUntil = time + 400;
-        b.capsizeUntil = time + 600;
+        if (!this.level.assists.noCapsize) {
+          b.capsizeUntil = time + 600;
+        }
         this.shakeUntil = time + 180;
         this.onGybe(true);
       }
@@ -513,25 +591,72 @@ export class Sim {
     }
   }
 
-  private onTackComplete() {
-    this.tackCount += 1;
-    if (this.mode === "race") {
-      this.score += SCORE.tack + (this.didFirstTack ? 0 : SCORE.tackFirstExtra);
-      this.didFirstTack = true;
-    }
-    this.setCoach(
-      "tack-done",
-      "Nice tack! Settle on the new heading and trim in.",
-      2200
+  /** True when the crew has just crossed to the new windward rail — a clean roll. */
+  private rolledWell(windwardSide: CrewSide): boolean {
+    return (
+      this.crewSide === windwardSide &&
+      this.now - this.lastCrossAt < ROLL_WINDOW_MS
     );
   }
 
-  private onGybe(crash: boolean) {
+  /**
+   * Grade a completed turn: a clean roll always grades "clean", otherwise grade
+   * on how much boat speed survived. Crew left on the wrong rail costs a little.
+   */
+  private gradeManeuver(
+    rolled: boolean,
+    windward: CrewSide,
+    tier: { clean: number; ok: number; sloppy: number }
+  ): { grade: ManeuverGrade; points: number; wrongRail: boolean } {
+    const b = this.boat;
+    const ratio = b.entrySpeed > 0.3 ? b.speedKt / b.entrySpeed : 1;
+    let grade: ManeuverGrade = "sloppy";
+    if (rolled || ratio >= MANEUVER.cleanSpeedKeep) {
+      grade = "clean";
+    } else if (ratio >= MANEUVER.okSpeedKeep) {
+      grade = "ok";
+    }
+    const wrongRail = this.crewSide !== windward;
+    let points = tier[grade];
+    if (wrongRail) {
+      points += MANEUVER.wrongRailPenalty;
+    }
+    return { grade, points, wrongRail };
+  }
+
+  private onTackComplete(rolled: boolean, windward: CrewSide) {
+    this.tackCount += 1;
+    const { grade, points, wrongRail } = this.gradeManeuver(
+      rolled,
+      windward,
+      MANEUVER.tack
+    );
+    let total = points;
+    if (!this.didFirstTack && grade === "clean") {
+      total += SCORE.tackFirstExtra;
+    }
+    this.didFirstTack = true;
+    this.score = Math.max(0, this.score + total);
+    this.addPopup(rolled ? "Roll tack!" : `${gradeLabel(grade)} tack`, total);
+    let line: string;
+    if (rolled) {
+      line =
+        "Beautiful roll tack — crossing as she came round drove her out of the turn!";
+    } else if (wrongRail) {
+      line = "Tacked, but cross to the new windward rail to keep her flat.";
+    } else if (grade === "clean") {
+      line = "Nice tack! Settle on the new heading and trim in.";
+    } else {
+      line = "Tacked, but you lost a lot of speed — turn smoothly next time.";
+    }
+    this.setCoach("tack-done", line, 2200);
+  }
+
+  private onGybe(crash: boolean, rolled = false, windward: CrewSide = 1) {
     if (crash) {
       this.crashGybes += 1;
-      if (this.mode === "race") {
-        this.score += SCORE.crashGybeFlat;
-      }
+      this.score = Math.max(0, this.score + SCORE.crashGybeFlat);
+      this.addPopup("Crash gybe", SCORE.crashGybeFlat);
       this.setCoach(
         "crash",
         "Crash gybe! Next time sheet IN before turning the stern through.",
@@ -540,45 +665,54 @@ export class Sim {
       return;
     }
     this.gybeCount += 1;
-    if (this.mode === "race") {
-      this.score += SCORE.gybe + (this.didFirstGybe ? 0 : SCORE.gybeFirstExtra);
-      this.didFirstGybe = true;
-    }
-    this.setCoach(
-      "gybe-done",
-      "Smooth gybe — now ease the sheet back out.",
-      2200
+    const { grade, points, wrongRail } = this.gradeManeuver(
+      rolled,
+      windward,
+      MANEUVER.gybe
     );
+    let total = points;
+    if (!this.didFirstGybe && grade === "clean") {
+      total += SCORE.gybeFirstExtra;
+    }
+    this.didFirstGybe = true;
+    this.score = Math.max(0, this.score + total);
+    this.addPopup(rolled ? "Roll gybe!" : `${gradeLabel(grade)} gybe`, total);
+    let line: string;
+    if (rolled) {
+      line =
+        "Lovely roll gybe — that cross flicked her forward out of the turn!";
+    } else if (wrongRail) {
+      line = "Gybed, but get your weight to the new windward side.";
+    } else if (grade === "clean") {
+      line = "Smooth gybe — now ease the sheet back out.";
+    } else {
+      line = "Gybed, but she stalled out of the turn — keep her moving.";
+    }
+    this.setCoach("gybe-done", line, 2200);
   }
 
   private stepCourse() {
-    if (this.mode !== "race" || this.targetIdx >= this.targets.length) {
+    if (this.targetIdx >= this.objectives.length) {
       return;
     }
     const b = this.boat;
-    const target = this.targets[this.targetIdx];
-    const mark = markFor(target);
-    if (mark) {
-      const d = Math.hypot(mark.x - b.x, mark.y - b.y);
-      if (d < COURSE.markRadius) {
-        this.score += SCORE.roundMark;
-        if (target === "LM") {
-          this.finishedLM = true;
-        }
-        this.targetIdx += 1;
-        const line =
-          target === "WM"
-            ? "Windward mark rounded — bear away and head down!"
-            : "Leeward mark rounded — head back up to finish!";
-        this.setCoach("rounded", line, 2600);
-      }
+    const obj = this.objectives[this.targetIdx];
+    if (Math.hypot(obj.x - b.x, obj.y - b.y) >= obj.r) {
       return;
     }
-    const crossing =
-      b.y >= COURSE.startLineY && Math.cos(b.heading * DEG2RAD) > 0;
-    if (this.finishedLM && crossing) {
+    this.targetIdx += 1;
+    if (obj.kind === "finish") {
       this.finishRace();
+      return;
     }
+    this.score += SCORE.roundMark;
+    this.addPopup(`${obj.label} ✓`, SCORE.roundMark);
+    const next = this.objectives[this.targetIdx];
+    this.setCoach(
+      "rounded",
+      next ? `${obj.label} — next: ${next.label}.` : `${obj.label} done!`,
+      2400
+    );
   }
 
   private stepScoring(dt: number) {
@@ -594,28 +728,27 @@ export class Sim {
       this.streakSec = 0;
     }
 
-    if (this.mode !== "race") {
-      return;
-    }
     const mult = this.streakMult();
     if (d.trimEff >= TRIM_GOOD && d.aTwa >= NO_GO_HALF) {
       this.score += SCORE.trimBonusPerSec * mult * dt;
     }
-    if (this.boat.state === "IN_IRONS") {
-      if (this.ironsPenaltyThisEpisode > SCORE.ironsMaxPerEpisode) {
-        const pen = SCORE.ironsPerSec * dt;
-        this.score += pen;
-        this.ironsPenaltyThisEpisode += pen;
+    if (!this.level.assists.noIronsPenalty) {
+      if (this.boat.state === "IN_IRONS") {
+        if (this.ironsPenaltyThisEpisode > SCORE.ironsMaxPerEpisode) {
+          const pen = SCORE.ironsPerSec * dt;
+          this.score += pen;
+          this.ironsPenaltyThisEpisode += pen;
+        }
+      } else {
+        this.ironsPenaltyThisEpisode = 0;
       }
-    } else {
-      this.ironsPenaltyThisEpisode = 0;
-    }
-    if (
-      d.aTwa < NO_GO_HALF &&
-      this.boat.speedKt > 0.2 &&
-      this.boat.state !== "IN_IRONS"
-    ) {
-      this.score += SCORE.noGoPerSec * dt;
+      if (
+        d.aTwa < NO_GO_HALF &&
+        this.boat.speedKt > 0.2 &&
+        this.boat.state !== "IN_IRONS"
+      ) {
+        this.score += SCORE.noGoPerSec * dt;
+      }
     }
     if (this.score < 0) {
       this.score = 0;
@@ -643,37 +776,41 @@ export class Sim {
   }
 
   private finishRace() {
+    const underPar = Math.max(0, this.level.parSec - this.elapsed);
     const timeBonus = Math.min(
       SCORE.timeBonusCap,
-      Math.max(
-        0,
-        Math.round(
-          (SCORE.targetTime - this.elapsed) * SCORE.timeBonusPerSecUnder
-        )
-      )
+      Math.round(underPar * SCORE.timeBonusPerSecUnder)
     );
     this.score += timeBonus;
     const avgTrim = this.trimSamples ? this.trimSum / this.trimSamples : 0;
-    const lines: string[] = [
-      avgTrim > 0.85
-        ? "Beautiful trim — your sail was full almost the whole way."
-        : "You finished the course — that's the hard part done!",
-    ];
-    if (this.crashGybes > 0) {
-      lines.push("Slow your downwind turns and sheet in to avoid crash gybes.");
-    } else if (this.gybeCount > 0) {
-      lines.push("Clean gybes downwind — nicely controlled.");
-    }
-    if (avgTrim < 0.8) {
-      lines.push("Keep the mainsheet in the green groove for more speed.");
-    }
+    const clean = this.crashGybes === 0 && this.capsizeCount === 0;
+    const fast = this.elapsed <= this.level.parSec;
 
+    // Generous, encouraging grading: finishing always earns a star; a clean run
+    // earns a second; a clean AND brisk run earns all three.
     let stars = 1;
-    if (this.crashGybes === 0) {
+    if (clean) {
       stars = 2;
     }
-    if (this.crashGybes === 0 && this.maxStreak >= 10) {
+    if (clean && fast) {
       stars = 3;
+    }
+
+    const lines: string[] = [`${this.level.name} complete!`];
+    if (stars === 3) {
+      lines.push("Three stars — clean and quick. You've got this.");
+    } else if (clean) {
+      lines.push(
+        "Clean run! Trim a little sharper and beat the par time for ★★★."
+      );
+    }
+    if (this.capsizeCount > 0) {
+      lines.push("Keep your weight on the windward rail to stay upright.");
+    } else if (this.crashGybes > 0) {
+      lines.push("Sheet in before you turn the stern through the wind.");
+    }
+    if (!this.level.assists.autoTrim && avgTrim < 0.8) {
+      lines.push("Keep the mainsheet in the green groove for more speed.");
     }
 
     this.result = {
@@ -683,8 +820,10 @@ export class Sim {
       crashGybes: this.crashGybes,
       elapsed: this.elapsed,
       finished: true,
+      levelId: this.level.id,
       lines,
-      marksRounded: Math.min(2, this.targetIdx),
+      marksRounded: this.objectives.filter((o) => o.kind === "checkpoint")
+        .length,
       maxStreak: this.maxStreak,
       stars,
       timeBonus,
@@ -761,20 +900,17 @@ export class Sim {
     bearing: number;
     dist: number;
   } | null {
-    if (this.mode !== "race" || this.targetIdx >= this.targets.length) {
+    if (this.targetIdx >= this.objectives.length) {
       return null;
     }
     const b = this.boat;
-    const target = this.targets[this.targetIdx];
-    const mark = markFor(target);
-    const tx = mark ? mark.x : 0;
-    const ty = mark ? mark.y : COURSE.startLineY;
-    const dx = tx - b.x;
-    const dy = ty - b.y;
+    const obj = this.objectives[this.targetIdx];
+    const dx = obj.x - b.x;
+    const dy = obj.y - b.y;
     return {
       bearing: wrap360(Math.atan2(dx, dy) * RAD2DEG),
       dist: Math.hypot(dx, dy),
-      label: labelFor(target),
+      label: obj.label,
     };
   }
 
@@ -803,6 +939,30 @@ export class Sim {
       mobDistM = Math.hypot(dx, dy);
     }
 
+    // nearest un-rescued drowned passenger, for the HUD guidance chip
+    let rescuedCount = 0;
+    let rescueBearingDeg: number | null = null;
+    let rescueDistM: number | null = null;
+    for (const p of this.rescues) {
+      if (p.picked) {
+        rescuedCount += 1;
+        continue;
+      }
+      const dd = Math.hypot(p.x - b.x, p.y - b.y);
+      if (rescueDistM === null || dd < rescueDistM) {
+        rescueDistM = dd;
+        rescueBearingDeg = wrap360(Math.atan2(p.x - b.x, p.y - b.y) * RAD2DEG);
+      }
+    }
+
+    // drop expired floating score chips before publishing the live set
+    this.popups = this.popups.filter((p) => time - p.born < POPUP_TTL_MS);
+    const popups: ScorePopup[] = this.popups.map((p) => ({
+      id: p.id,
+      points: p.points,
+      text: p.text,
+    }));
+
     const hud: HudState = {
       absTwa: d.aTwa,
       capsized: this.capsized,
@@ -812,20 +972,29 @@ export class Sim {
       headingDeg: b.heading,
       hiking: this.bridge.input.hike,
       inNoGo: d.aTwa < NO_GO_HALF,
+      levelId: this.level.id,
+      levelName: this.level.name,
       mobBearingDeg,
       mobDistM,
-      mode: this.mode,
       needCross,
       nextMarkBearingDeg: nm ? nm.bearing : null,
       nextMarkDistM: nm ? nm.dist : null,
       nextMarkLabel: nm ? nm.label : null,
+      objectiveIndex: Math.min(this.targetIdx, this.objectives.length),
+      objectiveTotal: this.objectives.length,
       optSheet: d.optSheet,
       pointOfSail: d.pointOfSail,
+      popups,
+      rescueBearingDeg,
+      rescueDistM,
+      rescueTotal: this.rescues.length,
+      rescuedCount,
       result: this.result,
       running: this.running,
       sailState: b.state,
       score: Math.round(this.score),
       sheet: d.sheet,
+      showWedge: this.level.assists.showWedge,
       signedTwa: d.sTwa,
       speedKt: Math.max(0, b.speedKt),
       streakLabel: this.streakLabel(),

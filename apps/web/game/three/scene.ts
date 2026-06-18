@@ -1,10 +1,11 @@
 import * as THREE from "three";
 
 import type { GameBridge } from "../bridge";
-import { COURSE, DEG2RAD, NO_GO_HALF } from "../constants";
+import { DEG2RAD, NO_GO_HALF, RESCUE_SPAWNS } from "../constants";
+import type { Objective } from "../levels";
 import { BoatModel } from "./boat";
 import { buildHarbour } from "./harbour";
-import { markFor, Sim } from "./sim";
+import { Sim } from "./sim";
 
 // World → Three: world metres (x east, y north, +Y up) map to the ground plane
 // (x, 0, -y). Heading 0 (north) = -Z. 1 world metre = 1 Three unit.
@@ -20,12 +21,35 @@ function w2z(y: number) {
   return -y;
 }
 
+/** Dispose every geometry + material under an object (course markers, scene). */
+function disposeTree(root: THREE.Object3D) {
+  root.traverse((o) => {
+    if (o instanceof THREE.Mesh) {
+      o.geometry.dispose();
+      const mat = o.material;
+      if (Array.isArray(mat)) {
+        for (const x of mat) {
+          x.dispose();
+        }
+      } else {
+        mat.dispose();
+      }
+    }
+  });
+}
+
 export function createScene(
   container: HTMLElement,
   bridge: GameBridge,
   onReady?: () => void
 ): () => void {
   const sim = new Sim(bridge);
+
+  // Respect the OS reduced-motion preference: the active-objective ring sits at a
+  // steady opacity instead of pulsing.
+  const reduceMotion =
+    typeof matchMedia !== "undefined" &&
+    matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   const renderer = new THREE.WebGLRenderer({ alpha: false, antialias: false });
   renderer.setPixelRatio(1);
@@ -54,9 +78,19 @@ export function createScene(
   sun.position.set(-0.5, 1.2, 0.45);
   scene.add(sun);
 
+  // onReady can be reached two ways (texture load and first rendered frame);
+  // fire it at most once so the consumer's boot flag flips a single time.
+  let readyNotified = false;
+  const notifyReady = () => {
+    if (!readyNotified) {
+      readyNotified = true;
+      onReady?.();
+    }
+  };
+
   // --- sea -------------------------------------------------------------------
   const tex = new THREE.TextureLoader().load("sprites/water.png", () =>
-    onReady?.()
+    notifyReady()
   );
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
@@ -79,33 +113,35 @@ export function createScene(
   const wedge = makeWedge();
   scene.add(wedge.mesh);
 
-  // --- course marks + start line --------------------------------------------
-  const marks = [makeBuoy(), makeBuoy()];
-  const wm = markFor("WM");
-  const lm = markFor("LM");
-  if (wm) {
-    marks[0].position.set(w2x(wm.x), 0.3, w2z(wm.y));
+  // --- course objectives (rebuilt whenever the level changes) ----------------
+  const courseGroup = new THREE.Group();
+  scene.add(courseGroup);
+  interface Marker {
+    group: THREE.Group;
+    ring: THREE.Mesh;
   }
-  if (lm) {
-    marks[1].position.set(w2x(lm.x), 0.3, w2z(lm.y));
-  }
-  for (const m of marks) {
-    scene.add(m);
-  }
-  const startLine = new THREE.Mesh(
-    new THREE.PlaneGeometry(
-      Math.abs(COURSE.startBoat.x - COURSE.startPin.x),
-      1.2
-    ),
-    new THREE.MeshStandardMaterial({
-      color: 0xff_ff_ff,
-      opacity: 0.5,
-      transparent: true,
-    })
-  );
-  startLine.rotation.x = -Math.PI / 2;
-  startLine.position.set(0, 0.05, w2z(COURSE.startLineY));
-  scene.add(startLine);
+  let markers: Marker[] = [];
+  let renderedLevelId = -1;
+
+  const buildCourse = () => {
+    for (const m of markers) {
+      courseGroup.remove(m.group);
+      disposeTree(m.group);
+    }
+    markers = sim.level.objectives.map((obj: Objective) => {
+      const group = new THREE.Group();
+      group.position.set(w2x(obj.x), 0, w2z(obj.y));
+      const buoy = obj.kind === "finish" ? makeFinishBuoy() : makeBuoy();
+      buoy.position.y = 0.3;
+      group.add(buoy);
+      const ring = makeTargetRing(obj.r);
+      group.add(ring);
+      courseGroup.add(group);
+      return { group, ring };
+    });
+    renderedLevelId = sim.level.id;
+  };
+  buildCourse();
 
   // --- wake (recycled foam dabs) --------------------------------------------
   const wake = makeWake(scene);
@@ -125,6 +161,15 @@ export function createScene(
   );
   mob.visible = false;
   scene.add(mob);
+
+  // drowned-passenger rescue objectives — a fixed pool of swimmers, toggled per
+  // level (most levels have none; the final race uses all of them).
+  const swimmers = RESCUE_SPAWNS.map(() => {
+    const s = makeSwimmer();
+    s.visible = false;
+    scene.add(s);
+    return s;
+  });
 
   // --- loop ------------------------------------------------------------------
   let raf = 0;
@@ -177,6 +222,7 @@ export function createScene(
       heading: b.heading,
       heel: sim.heel,
       hiking: bridge.input.hike,
+      luff: sim.derived.luff,
       nowMs,
       sailState: b.state,
       sheet: sim.derived.sheet,
@@ -198,15 +244,43 @@ export function createScene(
     sea.position.set(bx, 0, bz);
     tex.offset.set(bx / TILE_M, -bz / TILE_M);
 
-    // wedge sits at the boat, points toward where the wind comes FROM
+    // rebuild course markers when the level changes, then highlight the next one
+    if (sim.level.id !== renderedLevelId) {
+      buildCourse();
+    }
+    for (let i = 0; i < markers.length; i += 1) {
+      const m = markers[i];
+      const done = i < sim.targetIdx;
+      const isCurrent = i === sim.targetIdx;
+      m.group.visible = !done;
+      const ringMat = m.ring.material as THREE.MeshBasicMaterial;
+      let activeOpacity = 0.5;
+      if (!reduceMotion) {
+        activeOpacity = 0.4 + Math.sin(nowMs / 240) * 0.22;
+      }
+      ringMat.opacity = isCurrent ? activeOpacity : 0.12;
+    }
+
+    // wedge sits at the boat, points toward where the wind comes FROM; hidden on
+    // early levels where the no-go zone hasn't been taught yet.
+    wedge.mesh.visible = sim.level.assists.showWedge;
     wedge.mesh.position.set(bx, 0.06, bz);
     wedge.mesh.rotation.y = -sim.windDir * DEG2RAD;
     wedge.setActive(sim.derived.aTwa < NO_GO_HALF);
 
-    const racing = sim.mode === "race";
-    marks[0].visible = racing;
-    marks[1].visible = racing;
-    startLine.visible = racing;
+    // drowned-passenger swimmers bobbing in the water (hidden once picked up)
+    for (let i = 0; i < swimmers.length; i += 1) {
+      const r = sim.rescues[i];
+      const show = r !== undefined && !r.picked;
+      swimmers[i].visible = show;
+      if (show) {
+        swimmers[i].position.set(
+          w2x(r.x),
+          0.4 + Math.sin(nowMs / 250 + i) * 0.15,
+          w2z(r.y)
+        );
+      }
+    }
 
     wake.update(
       bx,
@@ -229,7 +303,7 @@ export function createScene(
     renderer.render(scene, camera);
     if (firstFrame) {
       firstFrame = false;
-      onReady?.();
+      notifyReady();
     }
   };
   raf = requestAnimationFrame(frame);
@@ -237,6 +311,9 @@ export function createScene(
   return () => {
     cancelAnimationFrame(raf);
     ro.disconnect();
+    // free every geometry + material in the scene (markers, wedge, swimmers,
+    // wake, sea, harbour, boat), then the renderer/texture/canvas.
+    disposeTree(scene);
     renderer.dispose();
     tex.dispose();
     canvas.remove();
@@ -275,6 +352,32 @@ function makeWedge() {
   };
 }
 
+// A person in the water: an orange head ringed by a white-and-red life buoy.
+function makeSwimmer(): THREE.Group {
+  const g = new THREE.Group();
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(0.55, 8, 6),
+    new THREE.MeshStandardMaterial({
+      color: 0xff_d2_8a,
+      flatShading: true,
+      roughness: 0.7,
+    })
+  );
+  head.position.y = 0.2;
+  g.add(head);
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(0.85, 0.22, 6, 14),
+    new THREE.MeshStandardMaterial({
+      color: 0xff_5a_3c,
+      flatShading: true,
+      roughness: 0.6,
+    })
+  );
+  ring.rotation.x = -Math.PI / 2;
+  g.add(ring);
+  return g;
+}
+
 function makeBuoy(): THREE.Mesh {
   const geom = new THREE.SphereGeometry(1.1, 12, 10);
   geom.scale(1, 1.2, 1);
@@ -293,6 +396,46 @@ function makeBuoy(): THREE.Mesh {
   band.position.y = 0.5;
   buoy.add(band);
   return buoy;
+}
+
+// The final objective gets a tall white-and-black finish buoy.
+function makeFinishBuoy(): THREE.Mesh {
+  const geom = new THREE.SphereGeometry(1.1, 12, 10);
+  geom.scale(1, 1.5, 1);
+  const buoy = new THREE.Mesh(
+    geom,
+    new THREE.MeshStandardMaterial({
+      color: 0xf4_f7_ff,
+      flatShading: true,
+      roughness: 0.6,
+    })
+  );
+  const band = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.14, 1.14, 0.45, 12),
+    new THREE.MeshStandardMaterial({ color: 0x16_1a_22, roughness: 0.8 })
+  );
+  band.position.y = 0.55;
+  buoy.add(band);
+  return buoy;
+}
+
+// A flat glowing ring on the water marking the radius you must sail into. The
+// active objective's ring pulses (set in the frame loop).
+function makeTargetRing(r: number): THREE.Mesh {
+  const geom = new THREE.RingGeometry(Math.max(0.6, r - 0.8), r, 28);
+  geom.rotateX(-Math.PI / 2);
+  const mesh = new THREE.Mesh(
+    geom,
+    new THREE.MeshBasicMaterial({
+      color: 0x7a_d8_ff,
+      depthWrite: false,
+      opacity: 0.3,
+      side: THREE.DoubleSide,
+      transparent: true,
+    })
+  );
+  mesh.position.y = 0.06;
+  return mesh;
 }
 
 function makeWake(scene: THREE.Scene) {
