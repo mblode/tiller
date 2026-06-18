@@ -6,9 +6,10 @@
 import { StarIcon } from "blode-icons-react";
 import type { ReactNode } from "react";
 
-/** Translucent beveled HUD chip — shared class list for in-game status pills. */
+/** Translucent beveled HUD chip — shared class list for in-game status pills.
+ *  Opaque enough to stay legible over the busy dithered sea. */
 export const CHIP =
-  "rounded-lg border border-white/10 bg-[#08303d]/75 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)] backdrop-blur-sm";
+  "rounded-lg border border-white/15 bg-[#08303d]/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_2px_6px_rgba(0,0,0,0.35)] backdrop-blur-md";
 
 /** A raised arcade card — the body of the pause, result, and brief dialogs. */
 export function PixelPanel({

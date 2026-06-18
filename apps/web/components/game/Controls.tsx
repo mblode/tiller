@@ -100,16 +100,16 @@ export function Controls({
   }, []);
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-end justify-between gap-3 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-end justify-between gap-2 px-[max(0.5rem,env(safe-area-inset-left))] pt-3 pr-[max(0.5rem,env(safe-area-inset-right))] pb-[max(0.75rem,env(safe-area-inset-bottom))]">
       {/* Tiller (inverted) */}
-      <div className="pointer-events-auto flex-1">
-        <div className="mb-1 flex justify-between px-1 font-pixel text-[10px] text-sky-200/80">
-          <span className="text-rose-300">◄ bow right</span>
-          <span>TILLER</span>
-          <span className="text-emerald-300">bow left ►</span>
+      <div className="pointer-events-auto min-w-0 flex-1">
+        <div className="mb-1 flex justify-between gap-1 px-1 font-pixel text-[9px] text-sky-200/80">
+          <span className="shrink-0 text-rose-300">◄ bow R</span>
+          <span className="shrink-0">TILLER</span>
+          <span className="shrink-0 text-emerald-300">bow L ►</span>
         </div>
         <div
-          className="relative h-14 touch-none select-none rounded-full border border-white/15 bg-gradient-to-r from-rose-500/25 via-black/40 to-emerald-500/25"
+          className="relative h-14 touch-none select-none rounded-full border-2 border-[#06222b]/70 bg-gradient-to-r from-rose-500/30 via-[#06222b]/85 to-emerald-500/30 shadow-[inset_0_2px_8px_rgba(0,0,0,0.55)]"
           onPointerDown={(e) => {
             e.currentTarget.setPointerCapture(e.pointerId);
             setDragging(true);
@@ -129,7 +129,7 @@ export function Controls({
         >
           <div className="-translate-x-1/2 -translate-y-1/2 pointer-events-none absolute top-1/2 left-1/2 h-8 w-px bg-white/25" />
           <div
-            className="-translate-y-1/2 absolute top-1/2 flex h-12 w-12 items-center justify-center rounded-full border-2 border-white/70 bg-amber-900 shadow-lg"
+            className="knob -translate-y-1/2 absolute top-1/2 flex h-12 w-12 items-center justify-center rounded-full"
             style={{
               left: `calc(${((tiller + 1) / 2) * 100}% )`,
               transform: "translate(-50%, -50%)",
@@ -138,18 +138,18 @@ export function Controls({
                 : "left 220ms cubic-bezier(.22,1,.36,1)",
             }}
           >
-            <ArrowLeftRightIcon aria-hidden className="size-4 text-amber-200" />
+            <ArrowLeftRightIcon aria-hidden className="size-5" />
           </div>
         </div>
       </div>
 
       {/* Cross sides + Hike out */}
-      <div className="pointer-events-auto flex flex-col items-center gap-2 pb-1">
+      <div className="pointer-events-auto flex shrink-0 flex-col items-center gap-2 pb-1">
         <button
-          className={`flex h-14 w-16 flex-col items-center justify-center rounded-xl border font-pixel text-[9px] leading-tight transition-colors ${
+          className={`pixel-panel flex h-14 w-14 flex-col items-center justify-center gap-0.5 rounded-xl font-pixel text-[8px] leading-tight active:translate-y-px motion-reduce:active:translate-y-0 ${
             needCross
-              ? "animate-pulse border-amber-300 bg-amber-400/30 text-amber-100"
-              : "border-white/15 bg-black/40 text-sky-100"
+              ? "animate-pulse text-amber-100 ring-2 ring-amber-300/80"
+              : "text-sky-100"
           }`}
           onPointerDown={(e) => {
             e.preventDefault();
@@ -161,10 +161,10 @@ export function Controls({
           CROSS
         </button>
         <button
-          className={`flex h-16 w-16 flex-col items-center justify-center rounded-xl border font-pixel text-[9px] leading-tight transition-colors ${
+          className={`pixel-panel flex h-16 w-14 flex-col items-center justify-center gap-0.5 rounded-xl font-pixel text-[8px] leading-tight active:translate-y-px motion-reduce:active:translate-y-0 ${
             hiking
-              ? "border-emerald-300 bg-emerald-400/40 text-emerald-50"
-              : "border-white/15 bg-black/40 text-sky-100"
+              ? "text-emerald-50 ring-2 ring-emerald-300/80"
+              : "text-sky-100"
           }`}
           onPointerDown={(e) => {
             e.currentTarget.setPointerCapture(e.pointerId);
@@ -180,12 +180,12 @@ export function Controls({
       </div>
 
       {/* Mainsheet */}
-      <div className="pointer-events-auto flex flex-col items-center">
-        <span className="mb-1 font-pixel text-[10px] text-sky-200/80">
+      <div className="pointer-events-auto flex shrink-0 flex-col items-center">
+        <span className="mb-1 font-pixel text-[9px] text-sky-200/80">
           SHEET
         </span>
         <div
-          className="relative h-40 w-16 touch-none select-none rounded-xl border border-white/15 bg-black/40"
+          className="pixel-inset relative h-40 w-14 touch-none select-none rounded-xl"
           onPointerDown={(e) => {
             e.currentTarget.setPointerCapture(e.pointerId);
             onSheetMove(e.clientY);
@@ -200,10 +200,10 @@ export function Controls({
           }
           ref={sheetTrack}
         >
-          {/* optimal groove */}
+          {/* optimal groove — mapped to the same clamped travel as the handle */}
           <div
-            className="absolute inset-x-1 h-5 rounded-md border border-emerald-300/60 bg-emerald-400/25"
-            style={{ top: `calc(${optSheet * 100}% - 10px)` }}
+            className="absolute inset-x-1 h-5 rounded-md border-2 border-emerald-300/70 bg-emerald-400/30 shadow-[0_0_8px_rgba(52,211,153,0.4)]"
+            style={{ top: `calc(0.75rem + ${optSheet} * 7.25rem)` }}
           />
           {/* labels */}
           <span className="absolute top-1 right-1 font-pixel text-[8px] text-sky-300/70">
@@ -212,13 +212,14 @@ export function Controls({
           <span className="absolute right-1 bottom-1 font-pixel text-[8px] text-sky-300/70">
             IN
           </span>
-          {/* handle */}
+          {/* handle — clamped to stay fully inside the track (44px tall in a
+              160px track → centre travels 22px‥138px) */}
           <div
-            className="-translate-x-1/2 -translate-y-1/2 absolute left-1/2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-white/70 shadow-lg"
+            className="pixel-handle -translate-x-1/2 -translate-y-1/2 absolute left-1/2 flex h-11 w-11 items-center justify-center rounded-full"
             style={{
               backgroundColor:
                 Math.abs(sheet - optSheet) < 0.1 ? "#10b981" : "#1f6b86",
-              top: `${sheet * 100}%`,
+              top: `calc(1.375rem + ${sheet} * 7.25rem)`,
             }}
           >
             <AnchorIcon aria-hidden className="size-4 text-white" />

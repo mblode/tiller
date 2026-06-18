@@ -11,7 +11,6 @@ import { Sim } from "./sim";
 // (x, 0, -y). Heading 0 (north) = -Z. 1 world metre = 1 Three unit.
 const VIEW_M = 48; // metres visible vertically (the "zoom")
 const PIXEL = 3; // pixelation factor (low-res buffer, CSS upscales)
-const TILE_M = 14; // metres of sea per water-texture tile
 const PLANE = 260;
 
 function w2x(x: number) {
@@ -89,20 +88,11 @@ export function createScene(
   };
 
   // --- sea -------------------------------------------------------------------
-  const tex = new THREE.TextureLoader().load("sprites/water.png", () =>
-    notifyReady()
-  );
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.LinearMipmapLinearFilter;
-  tex.repeat.set(PLANE / TILE_M, PLANE / TILE_M);
-  const sea = new THREE.Mesh(
-    new THREE.PlaneGeometry(PLANE, PLANE),
-    new THREE.MeshStandardMaterial({ map: tex, metalness: 0, roughness: 0.95 })
-  );
-  sea.rotation.x = -Math.PI / 2;
-  scene.add(sea);
+  // A procedural pixel-art ocean: chunky Bayer-dithered blue bands keyed off
+  // world coordinates (so it stays world-locked as the boat sails), with slow
+  // drifting wave streaks, sparse foam sparkle and an edge depth-gradient.
+  const sea = makeSea();
+  scene.add(sea.mesh);
 
   // --- Brighton harbour: beach, breakwater, marina, baths (scenery + obstacles)
   const harbour = buildHarbour();
@@ -239,10 +229,14 @@ export function createScene(
       );
     }
 
-    // sea follows the boat; texture offset keeps it world-locked (only scrolls
-    // as you actually sail — no decorative drift).
-    sea.position.set(bx, 0, bz);
-    tex.offset.set(bx / TILE_M, -bz / TILE_M);
+    // sea follows the boat so the plane always fills the view; the shader keys
+    // off world coords, so the pattern stays world-locked (only scrolls as you
+    // actually sail — no decorative drift). Freeze the animation under the OS
+    // reduced-motion preference, matching the objective ring.
+    sea.mesh.position.set(bx, 0, bz);
+    sea.material.uniforms.uTime.value = reduceMotion ? 0 : nowMs / 1000;
+    sea.material.uniforms.uBoat.value.set(bx, bz);
+    sea.material.uniforms.uWind.value = -sim.windDir * DEG2RAD;
 
     // rebuild course markers when the level changes, then highlight the next one
     if (sim.level.id !== renderedLevelId) {
@@ -315,9 +309,150 @@ export function createScene(
     // wake, sea, harbour, boat), then the renderer/texture/canvas.
     disposeTree(scene);
     renderer.dispose();
-    tex.dispose();
     canvas.remove();
   };
+}
+
+// A procedural pixel-art ocean on a flat plane. Unlit (so the colours stay
+// saturated regardless of scene lighting); the pattern is driven by world XZ so
+// it stays world-locked while the mesh itself follows the boat.
+function makeSea(): {
+  mesh: THREE.Mesh;
+  material: THREE.ShaderMaterial;
+} {
+  const material = new THREE.ShaderMaterial({
+    fog: false,
+    fragmentShader: /* glsl */ `
+      precision highp float;
+      varying vec2 vWorld;
+      uniform float uTime;
+      uniform vec2 uBoat;
+      uniform float uWind;
+
+      // four-stop blue palette, deep -> light (tuned to the 0x123a5a clear colour)
+      const vec3 C0 = vec3(0.055, 0.184, 0.306); // #0e2f4e deep navy
+      const vec3 C1 = vec3(0.078, 0.227, 0.353); // #143a5a
+      const vec3 C2 = vec3(0.114, 0.314, 0.471); // #1d5078
+      const vec3 C3 = vec3(0.184, 0.435, 0.588); // #2f6f96 light crest
+      const vec3 FOAM = vec3(0.74, 0.86, 0.93);  // pale foam fleck
+
+      float hash21(vec2 p) {
+        p = fract(p * vec2(123.34, 345.45));
+        p += dot(p, p + 34.345);
+        return fract(p.x * p.y);
+      }
+
+      // value noise with smooth interpolation
+      float vnoise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        float a = hash21(i);
+        float b = hash21(i + vec2(1.0, 0.0));
+        float c = hash21(i + vec2(0.0, 1.0));
+        float d = hash21(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+      }
+
+      float fbm(vec2 p) {
+        float v = 0.0;
+        float amp = 0.5;
+        for (int i = 0; i < 3; i++) {
+          v += amp * vnoise(p);
+          p *= 2.02;
+          amp *= 0.5;
+        }
+        return v;
+      }
+
+      // ordered 4x4 Bayer dither threshold in [0,1)
+      float bayer(vec2 fragXY) {
+        int x = int(mod(fragXY.x, 4.0));
+        int y = int(mod(fragXY.y, 4.0));
+        int idx = x + y * 4;
+        float m[16];
+        m[0]=0.0;  m[1]=8.0;  m[2]=2.0;  m[3]=10.0;
+        m[4]=12.0; m[5]=4.0;  m[6]=14.0; m[7]=6.0;
+        m[8]=3.0;  m[9]=11.0; m[10]=1.0; m[11]=9.0;
+        m[12]=15.0;m[13]=7.0; m[14]=13.0;m[15]=5.0;
+        float v = 0.0;
+        for (int i = 0; i < 16; i++) {
+          if (i == idx) { v = m[i]; }
+        }
+        return (v + 0.5) / 16.0;
+      }
+
+      void main() {
+        // snap world coords into chunky pixel cells (~0.55 m) so the surface
+        // reads as blocks rather than a smooth gradient
+        const float CELL = 0.55;
+        vec2 cell = floor(vWorld / CELL);
+        vec2 wdir = vec2(sin(uWind), cos(uWind));
+
+        // static, world-locked spatial structure (does NOT translate, so there
+        // is no whole-field cell-stepping as time passes)
+        float base = fbm(cell * 0.16);
+
+        // motion comes from continuous traveling ripples: sin() varies smoothly
+        // in time, and the per-cell phase offset (base * 5.0) means neighbouring
+        // cells cross brightness thresholds at different moments — so the surface
+        // shimmers and flows instead of pulsing in unison.
+        float crest = sin(dot(cell, wdir) * 0.55 - uTime * 1.4 + base * 5.0);
+        vec2 cross = vec2(-wdir.y, wdir.x);
+        float swell = sin(dot(cell, cross) * 0.22 - uTime * 0.55 + base * 3.0);
+
+        float n = 0.5 + (base - 0.5) * 0.7 + crest * 0.16 + swell * 0.08;
+
+        // dither the value before banding for speckled band edges
+        float dith = (bayer(gl_FragCoord.xy) - 0.5) * 0.16;
+        float t = clamp(n + dith, 0.0, 1.0);
+
+        // hard banding across the 4-stop palette
+        vec3 col;
+        if (t < 0.32) {
+          col = C0;
+        } else if (t < 0.55) {
+          col = C1;
+        } else if (t < 0.80) {
+          col = C2;
+        } else {
+          col = C3;
+        }
+
+        // sparse foam flecks that ride the moving crests: a static per-cell
+        // eligibility hash gated on crest proximity, so sparkles travel with the
+        // ripples (smooth) rather than blinking on a discrete clock.
+        float fh = hash21(cell);
+        if (fh > 0.95 && crest > 0.93 && t > 0.45) {
+          col = FOAM;
+        }
+
+        // depth gradient: darken with distance from the boat (replaces fog)
+        float d = length(vWorld - uBoat);
+        float depth = smoothstep(45.0, 120.0, d);
+        col = mix(col, C0 * 0.7, depth * 0.85);
+
+        gl_FragColor = vec4(col, 1.0);
+      }
+    `,
+    uniforms: {
+      uBoat: { value: new THREE.Vector2(0, 0) },
+      uTime: { value: 0 },
+      uWind: { value: 0 },
+    },
+    vertexShader: /* glsl */ `
+      varying vec2 vWorld;
+      void main() {
+        vec4 world = modelMatrix * vec4(position, 1.0);
+        vWorld = world.xz;
+        gl_Position = projectionMatrix * viewMatrix * world;
+      }
+    `,
+  });
+
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(PLANE, PLANE), material);
+  mesh.rotation.x = -Math.PI / 2;
+  return { material, mesh };
 }
 
 function makeWedge() {

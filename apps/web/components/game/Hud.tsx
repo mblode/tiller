@@ -30,14 +30,14 @@ function tackColor(tack: HudState["tack"]) {
   return "text-zinc-300";
 }
 
-function tackLetter(tack: HudState["tack"]) {
+function tackLabel(tack: HudState["tack"]) {
   if (tack === "PORT") {
-    return "P";
+    return "PORT";
   }
   if (tack === "STARBOARD") {
-    return "S";
+    return "STBD";
   }
-  return "—";
+  return "IN IRONS";
 }
 
 export function Hud({ hud }: { hud: HudState }) {
@@ -65,51 +65,59 @@ export function Hud({ hud }: { hud: HudState }) {
         ))}
       </div>
       {/* top bar */}
-      <div className="flex items-start justify-between gap-2 p-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
-        <div className={`flex items-center gap-2 px-2 py-1 ${CHIP}`}>
+      <div className="flex items-stretch justify-between gap-2 pt-[max(0.5rem,env(safe-area-inset-top))] pr-[max(0.5rem,env(safe-area-inset-right))] pb-2 pl-[max(0.5rem,env(safe-area-inset-left))]">
+        <div
+          className={`flex min-w-0 shrink items-center gap-2 px-2 py-1.5 ${CHIP}`}
+        >
           <WindRose
             headingDeg={hud.headingDeg}
             inNoGo={hud.inNoGo}
             windDir={hud.windDir}
           />
-          <div className="leading-tight">
+          <div className="min-w-0 leading-none">
             <div className="font-pixel text-sm text-sky-100">
               {hud.windSpeedKt.toFixed(0)} kn
             </div>
-            <div className="text-[10px] uppercase tracking-wide text-sky-300/80">
+            <div className="mt-1 text-[9px] uppercase text-sky-300/70">
               wind {cardinal(hud.windDir)}
             </div>
           </div>
         </div>
 
-        <div className={`px-3 py-1 text-center ${CHIP}`}>
-          <div className="font-pixel text-lg text-amber-200 drop-shadow-[1px_1px_0_rgba(0,0,0,0.5)]">
+        <div
+          className={`relative flex shrink-0 flex-col items-center justify-center px-3 py-1.5 ${CHIP}`}
+        >
+          <div className="font-pixel text-lg leading-none text-amber-200 drop-shadow-[1px_1px_0_rgba(0,0,0,0.5)]">
             {hud.score}
           </div>
-          <div className="text-[10px] uppercase tracking-wide text-amber-300/70">
+          <div className="mt-1 text-[9px] uppercase text-amber-300/70">
             score
           </div>
-          {hud.rescueTotal > 0 ? (
-            <div className="text-[10px] uppercase tracking-wide text-sky-300/80">
-              rescues {hud.rescuedCount}/{hud.rescueTotal}
-            </div>
-          ) : null}
-          {hud.streakLabel ? (
-            <div className="font-pixel text-[10px] text-emerald-300">
-              {hud.streakLabel}
-            </div>
-          ) : null}
+          {/* Secondary streak/rescue lines are absolutely positioned so the
+              score chip's box never changes height when they toggle. */}
+          <div className="pointer-events-none absolute inset-x-0 top-full flex flex-col items-center gap-0.5 pt-1">
+            {hud.streakLabel ? (
+              <span className="font-pixel text-[9px] text-emerald-300 drop-shadow-[1px_1px_0_rgba(0,0,0,0.5)]">
+                {hud.streakLabel}
+              </span>
+            ) : null}
+            {hud.rescueTotal > 0 ? (
+              <span className="font-pixel text-[9px] uppercase text-sky-200 drop-shadow-[1px_1px_0_rgba(0,0,0,0.5)]">
+                rescues {hud.rescuedCount}/{hud.rescueTotal}
+              </span>
+            ) : null}
+          </div>
         </div>
 
-        <div className={`px-2 py-1 text-right ${CHIP}`}>
+        <div
+          className={`flex min-w-0 shrink flex-col items-end justify-center px-2 py-1.5 ${CHIP}`}
+        >
           <div
-            className={`font-pixel text-sm ${speedGood ? "text-emerald-300" : "text-sky-100"}`}
+            className={`font-pixel text-sm leading-none ${speedGood ? "text-emerald-300" : "text-sky-100"}`}
           >
             {hud.speedKt.toFixed(1)} kn
           </div>
-          <div className="text-[10px] uppercase tracking-wide text-sky-300/80">
-            speed
-          </div>
+          <div className="mt-1 text-[9px] uppercase text-sky-300/70">speed</div>
         </div>
       </div>
 
@@ -157,7 +165,7 @@ export function Hud({ hud }: { hud: HudState }) {
         <span
           className={`px-2 py-0.5 font-pixel ${tackColor(hud.tack)} ${CHIP}`}
         >
-          {tackLetter(hud.tack)}
+          {tackLabel(hud.tack)}
         </span>
         <span className={`px-2 py-0.5 text-sky-50 ${CHIP}`}>
           {hud.pointOfSail}

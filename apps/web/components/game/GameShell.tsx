@@ -2,9 +2,10 @@
 
 import {
   AnchorIcon,
+  ArrowLeftRightIcon,
   ArrowRightIcon,
   LockIcon,
-  PauseIcon,
+  PauseFilledIcon,
   PlayIcon,
   RotateCcwIcon,
   XIcon,
@@ -27,7 +28,7 @@ import { GLOSSARY, HOW_TO_STEPS, TACK_VS_GYBE } from "./content";
 import { Controls } from "./Controls";
 import { Hud } from "./Hud";
 import { ThreeCanvas } from "./ThreeCanvas";
-import { PixelButton, PixelPanel, Stars } from "./ui";
+import { CHIP, PixelButton, PixelPanel, Stars } from "./ui";
 
 type Screen = "menu" | "levels" | "play";
 type Modal = "howto" | "glossary" | null;
@@ -167,6 +168,13 @@ export function GameShell() {
 
   const nextId = hud.result ? hud.result.levelId + 1 : 0;
   const nextUnlocked = nextId <= LAST_LEVEL_ID;
+  // A cross is only "wanted" mid-maneuver or when you're caught on the wrong
+  // rail; the swipe is ignored otherwise so a stray drag can't capsize you.
+  const crossable =
+    hud.sailState === "TACKING" ||
+    hud.sailState === "GYBING" ||
+    hud.sailState === "CRASH_GYBE" ||
+    hud.needCross;
 
   return (
     <div className="flex min-h-dvh w-full items-center justify-center bg-zinc-950">
@@ -188,6 +196,8 @@ export function GameShell() {
               }}
             />
             <Hud hud={hud} />
+            <CrossSwipe active={crossable} bridge={bridge} />
+            {hud.needCross ? <SwipeHint /> : null}
             <Controls
               bridge={bridge}
               needCross={hud.needCross}
@@ -200,7 +210,7 @@ export function GameShell() {
               onClick={togglePause}
               type="button"
             >
-              <PauseIcon aria-hidden className="size-4" />
+              <PauseFilledIcon aria-hidden className="size-5" />
             </button>
 
             {booting ? (
@@ -350,6 +360,75 @@ export function GameShell() {
 // A modal overlay: moves focus inside on open, traps Tab, restores focus to the
 // trigger on close, and scrolls when its content is taller than the viewport so
 // action buttons can never be clipped off-screen on a short phone.
+// Crossing the boat = a swipe across the open water (duck under the boom), the
+// real dinghy move. Pointer Events drive it, so a finger drag (touch) and a
+// mouse drag (desktop) both work; the C key and CROSS button are the no-touch /
+// fallback paths. Sits over the sea, below the bottom controls and pause button,
+// so the tiller/sheet still take their own input. Only honored when a cross is
+// actually wanted (`active`), so a stray drag can't capsize the boat.
+function CrossSwipe({
+  bridge,
+  active,
+}: {
+  bridge: GameBridge;
+  active: boolean;
+}) {
+  const start = useRef<{ x: number; y: number } | null>(null);
+  const fired = useRef(false);
+  const reset = () => {
+    start.current = null;
+    fired.current = false;
+  };
+  return (
+    <div
+      aria-hidden
+      className="absolute inset-x-0 top-16 bottom-[calc(11rem+env(safe-area-inset-bottom))] z-10 touch-none"
+      onPointerCancel={reset}
+      onPointerDown={(e) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        start.current = { x: e.clientX, y: e.clientY };
+        fired.current = false;
+      }}
+      onPointerMove={(e) => {
+        const s = start.current;
+        if (!(s && active) || fired.current) {
+          return;
+        }
+        const dx = e.clientX - s.x;
+        const dy = e.clientY - s.y;
+        // threshold scales with screen width so it feels the same on phone & desktop
+        const vw = typeof window === "undefined" ? 375 : window.innerWidth;
+        const threshold = Math.max(48, vw * 0.12);
+        if (Math.abs(dx) > threshold && Math.abs(dx) > Math.abs(dy) * 1.4) {
+          fired.current = true;
+          bridge.requestCrossSide();
+        }
+      }}
+      onPointerUp={reset}
+    />
+  );
+}
+
+// Contextual cue shown only while the crew is on the wrong rail: teaches the
+// gesture at the moment it matters, with copy matched to the input device.
+function SwipeHint() {
+  return (
+    <div className="pointer-events-none absolute inset-x-0 top-[42%] z-10 flex justify-center px-4">
+      <div
+        className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] text-amber-100 ${CHIP}`}
+      >
+        <ArrowLeftRightIcon aria-hidden className="size-4 anim-hint" />
+        <span className="hidden pointer-coarse:inline">
+          Swipe across to cross sides
+        </span>
+        <span className="inline pointer-coarse:hidden">
+          Drag across or press C to cross
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function Overlay({
   children,
   label,
@@ -465,8 +544,8 @@ function Menu({
           </PixelButton>
         </div>
         <p className="mt-2 text-center text-xs text-sky-300/70">
-          Phone: drag the tiller &amp; sheet. Desktop: arrow keys / A-D steer,
-          W-S trim.
+          Phone: drag the tiller &amp; sheet, swipe across to cross sides.
+          Desktop: A-D steer, W-S trim, C to cross.
         </p>
       </div>
     </div>

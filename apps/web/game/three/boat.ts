@@ -143,6 +143,8 @@ export class BoatModel {
   private crewX = -RAIL_X; // animated crew lateral position (slides on flip)
   private hikeAmt = 0; // 0..1 hiking blend
   private capsizeRoll = 0; // animated capsize roll (rad)
+  private helmArm = new THREE.Group(); // the helm's tiller-extension hand
+  private duckAmt = 0; // 0..1 duck-under-the-boom blend during a tack/gybe
 
   constructor() {
     this.hull = makeHull();
@@ -206,6 +208,18 @@ export class BoatModel {
     this.crewB = makeCrew(CREW_SHIRT);
     this.crewB.group.position.set(-RAIL_X, RAIL_Y, -0.6);
     this.rig.add(this.crewB.group);
+
+    // tiller extension in the helm's hand — a thin spar angled inboard/aft
+    // toward the rudder. It swings across to the other hand as the crew crosses.
+    const extGeo = new THREE.CylinderGeometry(0.035, 0.05, 1.6, 5);
+    extGeo.translate(0, -0.8, 0); // pivot at the top (the hand)
+    const ext = new THREE.Mesh(
+      extGeo,
+      new THREE.MeshStandardMaterial({ color: WOOD_DARK, roughness: 0.8 })
+    );
+    this.helmArm.position.set(0, 0.55, 0.15);
+    this.helmArm.add(ext);
+    this.crewA.group.add(this.helmArm);
 
     this.group.add(this.rig);
 
@@ -284,6 +298,24 @@ export class BoatModel {
     this.crewB.group.position.x = outboardX;
     this.crewB.group.position.y = RAIL_Y - this.hikeAmt * 0.12 - bob;
     this.crewB.lean.rotation.z = leanRot;
+
+    // ---- duck under the boom + swap hands on the tiller through a turn ----
+    const ducking =
+      p.sailState === "TACKING" ||
+      p.sailState === "GYBING" ||
+      p.sailState === "CRASH_GYBE";
+    const duckTarget = ducking && !p.capsized ? 1 : 0;
+    this.duckAmt += (duckTarget - this.duckAmt) * Math.min(1, 8 * p.dtSec);
+    // crouch and bend forward to clear the swinging boom
+    const duckBend = this.duckAmt * 0.6;
+    this.crewA.lean.rotation.x = duckBend;
+    this.crewB.lean.rotation.x = duckBend;
+    this.crewA.group.position.y -= this.duckAmt * 0.16;
+    this.crewB.group.position.y -= this.duckAmt * 0.16;
+    // the extension swings continuously across as the crew slides to the new
+    // rail — reading as the hand-swap; it always points inboard toward the rudder
+    const xn = Math.max(-1, Math.min(1, this.crewX / RAIL_X));
+    this.helmArm.rotation.set(-0.5, 0, -xn * 0.95);
 
     // ---- heel: roll the rig+hull to leeward; hiking counters it ----
     const heelTarget = p.heel * (1 - 0.55 * this.hikeAmt);
