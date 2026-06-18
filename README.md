@@ -65,7 +65,7 @@ This is an npm-workspaces turborepo and the game lives in `apps/web`.
 
 ## Under the hood
 
-Next.js 16, React 19, and a hand-rolled sailing engine rendered in 3D with Three.js. The pixel sprites are generated with Google Gemini's image model and downscaled to a crisp, limited palette. Type set in Geist Pixel.
+Next.js 16, React 19, and a hand-rolled sailing engine rendered in 3D with Three.js. Type set in Geist Pixel.
 
 ```
 apps/web/
@@ -77,21 +77,10 @@ apps/web/
     levels.ts           the 7-level campaign and its per-level training wheels
     three/              Three.js scene: world, boat, harbour, sim loop
     bridge.ts           React to engine pub/sub
-  scripts/            build-time pixel-art generator
 docs/                 sailing-spec.md + sailing-params.json (the design source)
 ```
 
 The whole sailing model (no-go half-angle, speed polar, trim efficiency, the tack/gybe state machine, scoring, and coaching copy) is specified in [`docs/sailing-spec.md`](docs/sailing-spec.md) and implemented faithfully in `game/`.
-
-### Regenerating the pixel art
-
-Sprites are produced with Gemini and post-processed (chroma-key plus downscale) with `sharp`. The API key is read from the environment, so never commit it.
-
-```bash
-cd apps/web
-GEMINI_API_KEY=... node scripts/generate-art.mjs        # all sprites
-GEMINI_API_KEY=... node scripts/generate-art.mjs hull   # just one
-```
 
 ## License
 
