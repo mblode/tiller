@@ -20,6 +20,9 @@ export const metadata: Metadata = {
   description:
     "A tiny pixel-art sailing game. Learn the wind, the no-go zone, tacking and gybing by sailing a little dinghy.",
   title: "Tiller — learn to sail a dinghy",
+  verification: {
+    google: "mFwyBIbXTaKK4uF_NA0MzVWFyY40hPgBjFObg3rje04",
+  },
 };
 
 export const viewport = {
