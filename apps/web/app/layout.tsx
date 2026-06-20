@@ -1,3 +1,4 @@
+import { GoogleAnalytics } from "@next/third-parties/google";
 import { Agentation } from "agentation";
 import { GeistPixelSquare } from "geist/font/pixel";
 import type { Metadata } from "next";
@@ -44,6 +45,7 @@ export default function RootLayout({
         {children}
         {process.env.NODE_ENV === "development" && <Agentation />}
       </body>
+      <GoogleAnalytics gaId="G-FYYYNS83W2" />
     </html>
   );
 }
