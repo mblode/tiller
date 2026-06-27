@@ -130,6 +130,23 @@
   html {
     @apply font-sans;
   }
+
+  /* This is a game: hold-and-drag on the tiller knob, mainsheet handle, and
+     buttons should steer the boat, not select text. Kill text selection and
+     the iOS long-press callout everywhere by default. */
+  * {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* Re-enable selection where reading/copying real text is expected. */
+  input,
+  textarea,
+  [contenteditable="true"] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
 }
 
 /* ─── Tiller: retro pixel-arcade nautical UI system ────────────────────────
