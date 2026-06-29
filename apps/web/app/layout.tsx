@@ -4,6 +4,8 @@ import { GeistPixelSquare } from "geist/font/pixel";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
+import { CraftedBy } from "@/components/crafted-by";
+
 import "./globals.css";
 
 const geistSans = Geist({
@@ -46,6 +48,9 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col overscroll-none">
         {children}
+        <footer className="flex justify-center p-4">
+          <CraftedBy />
+        </footer>
         {process.env.NODE_ENV === "development" && <Agentation />}
       </body>
       <GoogleAnalytics gaId="G-FYYYNS83W2" />
