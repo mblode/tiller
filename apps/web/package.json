@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "portless run next dev",
-    "build": "next build",
+    "build": "node ../../scripts/next-build.mjs",
     "start": "next start",
     "lint": "oxlint .",
     "lint:fix": "oxlint --fix .",
