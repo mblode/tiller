@@ -1,7 +1,6 @@
 {
   "name": "sail",
   "private": true,
-  "packageManager": "npm@10.9.3",
   "workspaces": [
     "apps/*"
   ],
@@ -14,12 +13,14 @@
     "format:check": "turbo format:check",
     "check-types": "turbo check-types",
     "check": "ultracite check",
-    "fix": "ultracite fix"
+    "fix": "ultracite fix",
+    "prepare": "lefthook install || true"
   },
   "devDependencies": {
     "babel-plugin-react-compiler": "1.0.0",
-    "sharp": "^0.35.1",
+    "sharp": "^0.35.3",
     "turbo": "^2",
-    "ultracite": "^7.1.5"
-  }
+    "ultracite": "7.9.3"
+  },
+  "packageManager": "npm@12.0.1"
 }

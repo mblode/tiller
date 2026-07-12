@@ -1,0 +1,7 @@
+pre-commit:
+  parallel: true
+  jobs:
+    - name: format-and-lint
+      glob: "*.{js,jsx,ts,tsx,json,jsonc,css}"
+      run: npx oxfmt --write {staged_files} && npx oxlint --fix --config apps/web/oxlint.config.ts {staged_files}
+      stage_fixed: true

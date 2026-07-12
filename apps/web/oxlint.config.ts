@@ -19,8 +19,12 @@ export default defineConfig({
     // All bug-catching rules (unused vars, complexity, hooks, security,
     // no-any) stay on.
     "func-style": "off",
+    "jsx-a11y/prefer-tag-over-role": "off",
+    "nextjs/no-img-element": "off",
     "no-inline-comments": "off",
     "no-use-before-define": "off",
+    "react/react-compiler": "off",
     "unicorn/filename-case": "off",
+    "unicorn/prefer-single-call": "off",
   },
 });
