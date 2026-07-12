@@ -3,5 +3,5 @@ pre-commit:
   jobs:
     - name: format-and-lint
       glob: "*.{js,jsx,ts,tsx,json,jsonc,css}"
-      run: npx oxfmt --write {staged_files} && npx oxlint --fix --config apps/web/oxlint.config.ts {staged_files}
+      run: npx oxfmt --write {staged_files} && cd apps/web && npx oxlint --fix .
       stage_fixed: true
