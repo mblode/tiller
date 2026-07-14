@@ -8,7 +8,7 @@ export function CraftedBy() {
     >
       <span>Crafted by</span>
       <img
-        src="https://matthewblode.com/avatar-sm.png"
+        src="/avatar-sm.png"
         alt="Matthew Blode"
         width={20}
         height={20}
