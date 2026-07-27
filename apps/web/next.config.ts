@@ -1,8 +1,27 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  assetPrefix: "/tiller",
+  basePath: "/tiller",
   reactCompiler: true,
+  redirects() {
+    return Promise.resolve([
+      {
+        basePath: false,
+        destination: "https://blode.co/tiller",
+        has: [{ type: "host" as const, value: "tiller.blode.co" }],
+        permanent: true,
+        source: "/",
+      },
+      {
+        basePath: false,
+        destination: "https://blode.co/tiller/:path*",
+        has: [{ type: "host" as const, value: "tiller.blode.co" }],
+        permanent: true,
+        source: "/:path*",
+      },
+    ]);
+  },
   typescript: { ignoreBuildErrors: true },
 };
 

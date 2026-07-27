@@ -1,4 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "npm install --prefix=../.."
+  "installCommand": "npm install --package-lock=false --prefix=../.."
 }

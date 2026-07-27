@@ -507,7 +507,7 @@ function Menu({
           className="h-auto w-full"
           height={393}
           priority
-          src="/sprites/title.png"
+          src="/tiller/sprites/title.png"
           style={{ imageRendering: "pixelated" }}
           width={720}
         />
