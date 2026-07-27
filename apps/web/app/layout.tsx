@@ -17,22 +17,29 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
 });
 const siteUrl = "https://blode.co/tiller";
+const siteTitle = "Tiller: learn to sail a dinghy";
+const siteDescription =
+  "A tiny pixel-art sailing game. Learn the wind, the no-go zone, tacking and gybing by sailing a little dinghy.";
 
 export const metadata: Metadata = {
   alternates: {
     canonical: siteUrl,
   },
-  description:
-    "A tiny pixel-art sailing game. Learn the wind, the no-go zone, tacking and gybing by sailing a little dinghy.",
+  description: siteDescription,
   metadataBase: new URL(siteUrl),
   openGraph: {
-    description:
-      "A tiny pixel-art sailing game. Learn the wind, the no-go zone, tacking and gybing by sailing a little dinghy.",
-    title: "Tiller: learn to sail a dinghy",
+    description: siteDescription,
+    siteName: "Tiller",
+    title: siteTitle,
     type: "website",
     url: siteUrl,
   },
-  title: "Tiller — learn to sail a dinghy",
+  title: siteTitle,
+  twitter: {
+    card: "summary_large_image",
+    description: siteDescription,
+    title: siteTitle,
+  },
   verification: {
     google: "mFwyBIbXTaKK4uF_NA0MzVWFyY40hPgBjFObg3rje04",
   },
