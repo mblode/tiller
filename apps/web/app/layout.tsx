@@ -1,4 +1,3 @@
-import { GoogleAnalytics } from "@next/third-parties/google";
 import { Agentation } from "agentation";
 import { GeistPixelSquare } from "geist/font/pixel";
 import type { Metadata } from "next";
@@ -17,10 +16,22 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
   variable: "--font-geist-mono",
 });
+const siteUrl = "https://blode.co/tiller";
 
 export const metadata: Metadata = {
+  alternates: {
+    canonical: siteUrl,
+  },
   description:
     "A tiny pixel-art sailing game. Learn the wind, the no-go zone, tacking and gybing by sailing a little dinghy.",
+  metadataBase: new URL(siteUrl),
+  openGraph: {
+    description:
+      "A tiny pixel-art sailing game. Learn the wind, the no-go zone, tacking and gybing by sailing a little dinghy.",
+    title: "Tiller: learn to sail a dinghy",
+    type: "website",
+    url: siteUrl,
+  },
   title: "Tiller — learn to sail a dinghy",
   verification: {
     google: "mFwyBIbXTaKK4uF_NA0MzVWFyY40hPgBjFObg3rje04",
@@ -46,6 +57,10 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${GeistPixelSquare.variable} h-full antialiased`}
     >
+      <head>
+        <link href="https://us.i.posthog.com" rel="preconnect" />
+        <link href="https://us-assets.i.posthog.com" rel="dns-prefetch" />
+      </head>
       <body className="min-h-full flex flex-col overscroll-none">
         {children}
         <footer className="flex justify-center p-4">
@@ -53,7 +68,6 @@ export default function RootLayout({
         </footer>
         {process.env.NODE_ENV === "development" && <Agentation />}
       </body>
-      <GoogleAnalytics gaId="G-FYYYNS83W2" />
     </html>
   );
 }
