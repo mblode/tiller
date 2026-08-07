@@ -14,7 +14,7 @@ Runs in any browser, on a phone or a laptop. No wetsuit, no sailing club.
 
 <p>
 <a href="https://blode.co/tiller">
-<img alt="View demo" src=".github/assets/demo.svg" width="200" />
+<img alt="Start sailing" src=".github/assets/demo.svg" width="200" />
 </a>
 </p>
 
