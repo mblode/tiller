@@ -1,20 +1,24 @@
 import { Agentation } from "agentation";
 import { GeistPixelSquare } from "geist/font/pixel";
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 
 import { CraftedBy } from "@/components/crafted-by";
 
 import "./globals.css";
 
-const geistSans = Geist({
-  subsets: ["latin"],
-  variable: "--font-geist-sans",
-});
-
-const geistMono = Geist_Mono({
-  subsets: ["latin"],
-  variable: "--font-geist-mono",
+// Glide reads the prose: the how-to steps and the glossary definitions are
+// sentences, and a pixel face is the wrong tool for a paragraph. Geist Pixel
+// Square stays on for everything the game labels (`font-pixel`), which is where
+// the arcade art direction lives.
+const glide = localFont({
+  display: "swap",
+  src: [
+    { path: "./fonts/glide-variable.woff2", style: "normal" },
+    { path: "./fonts/glide-variable-italic.woff2", style: "italic" },
+  ],
+  variable: "--font-glide",
+  weight: "100 950",
 });
 const siteUrl = "https://blode.co/tiller";
 const siteTitle = "Tiller: learn to sail a dinghy";
@@ -62,7 +66,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${GeistPixelSquare.variable} h-full antialiased`}
+      className={`${glide.variable} ${GeistPixelSquare.variable} h-full antialiased`}
     >
       <head>
         <link href={process.env.NEXT_PUBLIC_POSTHOG_HOST} rel="preconnect" />
