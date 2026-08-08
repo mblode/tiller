@@ -52,7 +52,9 @@ export function Stars({
 }
 
 /** Chunky arcade button. One `primary` (brass) per surface; the rest secondary
- *  (beveled panel) or ghost (outline). 48px tall to clear the touch-target min. */
+ *  (beveled panel) or ghost (outline). 48px tall to clear the touch-target min.
+ *  `font-pixel` is set here rather than inherited: the page sans is Glide, which
+ *  is the right face for a sentence and the wrong one for an arcade CTA. */
 export function PixelButton({
   children,
   onClick,
@@ -74,7 +76,7 @@ export function PixelButton({
   }
   return (
     <button
-      className={`inline-flex h-12 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-transform focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300 disabled:opacity-50 motion-reduce:transition-none ${tone} ${className}`}
+      className={`inline-flex h-12 items-center justify-center gap-2 rounded-xl px-4 font-pixel text-sm font-semibold transition-transform focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300 disabled:opacity-50 motion-reduce:transition-none ${tone} ${className}`}
       onClick={onClick}
       type="button"
     >
