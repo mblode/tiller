@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 
 import { CraftedBy } from "@/components/crafted-by";
+import { siteDescription, siteTitle, siteUrl } from "@/lib/site";
 
 import "./globals.css";
 
@@ -20,27 +21,32 @@ const glide = localFont({
   variable: "--font-glide",
   weight: "100 950",
 });
-const siteUrl = "https://blode.co/tiller";
-const siteTitle = "Tiller: learn to sail a dinghy";
-const siteDescription =
-  "A tiny pixel-art sailing game. Learn the wind, the no-go zone, tacking and gybing by sailing a little dinghy.";
-
 export const metadata: Metadata = {
   alternates: {
     canonical: siteUrl,
   },
+  authors: [{ name: "Matthew Blode", url: "https://blode.co" }],
+  creator: "Matthew Blode",
   description: siteDescription,
   metadataBase: new URL(siteUrl),
   openGraph: {
     description: siteDescription,
-    siteName: "Tiller",
+    // Not "Tiller": every blode.co path is one site, and the product name is
+    // already in og:title, so this is the only slot in the card left to say
+    // who made the thing. See
+    // blode-co/apps/web/.claude/knowledge/zone-conventions.md Rule 9.
+    siteName: "Matthew Blode",
     title: siteTitle,
     type: "website",
     url: siteUrl,
   },
-  title: siteTitle,
+  title: {
+    default: siteTitle,
+    template: "%s | Tiller",
+  },
   twitter: {
     card: "summary_large_image",
+    creator: "@mattblode",
     description: siteDescription,
     title: siteTitle,
   },

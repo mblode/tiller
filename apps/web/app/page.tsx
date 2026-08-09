@@ -1,8 +1,85 @@
 import { GameShell } from "@/components/game/GameShell";
+import { ZoneBreadcrumb } from "@/components/zone-breadcrumb";
+import { siteDescription, siteTitle, siteUrl } from "@/lib/site";
+
+/**
+ * One script holding one `@graph`. Separate blocks are separate, disconnected
+ * nodes, and disconnected nodes cannot be merged into a single entity. See
+ * blode-co/apps/web/.claude/knowledge/zone-conventions.md Rule 3.
+ *
+ * `WebPage` and nothing more, on purpose. Tiller is a browser toy, not software
+ * you install, and it has no price: Google's Software App rich result wants
+ * `offers` plus an `aggregateRating` or `review`, and its guidelines forbid a
+ * rating you wrote about your own work. `SoftwareApplication` here could only
+ * ever be a type that fails validation.
+ *
+ * The three identity nodes are referenced by `@id` and never redefined. A
+ * zone-scoped `#person` would publish a second Matthew Blode on this domain.
+ */
+const JSON_LD = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@id": `${siteUrl}/#webpage`,
+      "@type": "WebPage",
+      author: { "@id": "https://blode.co/#person" },
+      breadcrumb: { "@id": `${siteUrl}/#breadcrumb` },
+      description: siteDescription,
+      inLanguage: "en",
+      isPartOf: { "@id": "https://blode.co/#website" },
+      name: siteTitle,
+      // `publisher` is the Organization and `author` is the Person: a Person
+      // publisher shows up as a Search Console enhancement warning.
+      publisher: { "@id": "https://blode.co/#organization" },
+      url: siteUrl,
+    },
+    {
+      "@id": `${siteUrl}/#breadcrumb`,
+      "@type": "BreadcrumbList",
+      // Word for word what <ZoneBreadcrumb> renders below: Google reads a
+      // mismatch between the two as a markup error.
+      itemListElement: [
+        {
+          "@type": "ListItem",
+          item: "https://blode.co",
+          name: "Matthew Blode",
+          position: 1,
+        },
+        {
+          "@type": "ListItem",
+          item: "https://blode.co/projects",
+          name: "Projects",
+          position: 2,
+        },
+        { "@type": "ListItem", item: siteUrl, name: "Tiller", position: 3 },
+      ],
+    },
+  ],
+};
 
 export default function Home() {
   return (
     <>
+      {/* Static object literal, no user input. See oxlint.config.ts. */}
+      <script
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
+        type="application/ld+json"
+      />
+
+      {/*
+        The trail rides on the game's own dark field rather than the page
+        background: the arcade art direction runs edge to edge and a pale strip
+        above it would read as a browser chrome bar. `dark` flips the shadcn
+        token block in globals.css, which is what lets the breadcrumb stay a
+        verbatim copy of the reference implementation instead of growing a set
+        of one-off colours. Width matches the game's 480px column.
+      */}
+      <header className="dark bg-zinc-950 px-4 py-2.5">
+        <div className="mx-auto w-full max-w-[480px]">
+          <ZoneBreadcrumb product="Tiller" />
+        </div>
+      </header>
+
       <GameShell />
 
       {/*

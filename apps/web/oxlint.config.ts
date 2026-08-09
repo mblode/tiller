@@ -12,6 +12,16 @@ export default defineConfig({
     // Build-time art generator, not shipped app code.
     "scripts/**",
   ],
+  // Scoped to the one file that needs it, rather than switching a real rule
+  // off across the whole app.
+  overrides: [
+    {
+      files: ["app/page.tsx"],
+      // The JSON-LD block is a static object literal with no user input, and
+      // injecting an ld+json script this way is the documented Next pattern.
+      rules: { "no-danger": "off" },
+    },
+  ],
   rules: {
     // Stylistic-only rules that fight idiomatic React + Phaser code:
     // `export function Component()`, PascalCase component files, hoisted
