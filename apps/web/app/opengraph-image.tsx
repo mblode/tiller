@@ -1,64 +1,30 @@
-import { ImageResponse } from "next/og";
+import { renderZoneOgImage } from "@/app/og-image-shared";
+import { siteTitle } from "@/lib/site";
 
-export const alt = "Tiller: learn to sail a dinghy";
-export const contentType = "image/png";
-export const size = { height: 630, width: 1200 };
+export {
+  OG_CONTENT_TYPE as contentType,
+  OG_SIZE as size,
+} from "@/app/og-image-shared";
 
-// Sea palette taken from the viewport theme colour in layout.tsx.
-const DEEP_SEA = "#0b3a4a";
-const SHALLOWS = "#12657d";
-const FOAM = "#e9f6f9";
+export { siteTitle as alt } from "@/lib/site";
 
-// GeistPixelSquare is a local font that next/og (Satori) cannot decode, so we
-// fall back to the bundled default font.
+/**
+ * The house card (Rule 12). The sea-gradient card this replaces was one of the
+ * eighteen unrelated designs the rule was written against: 156px type, its own
+ * palette, and no byline, so a share of this zone said nothing about who made
+ * it.
+ *
+ * The pixel art direction stays where it belongs, on the game itself. A social
+ * card is a row in someone else's feed, and there it has to read as one of
+ * thirty-three things by the same person.
+ */
 export default function OpengraphImage() {
-  return new ImageResponse(
-    <div
-      style={{
-        alignItems: "center",
-        background: `linear-gradient(180deg, ${SHALLOWS} 0%, ${DEEP_SEA} 100%)`,
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        justifyContent: "center",
-        padding: "80px",
-        width: "100%",
-      }}
-    >
-      <div
-        style={{
-          color: FOAM,
-          display: "flex",
-          fontSize: 156,
-          fontWeight: 700,
-          letterSpacing: "-0.05em",
-          lineHeight: 1,
-        }}
-      >
-        Tiller
-      </div>
-      <div
-        style={{
-          color: "rgba(233, 246, 249, 0.85)",
-          display: "flex",
-          fontSize: 46,
-          marginTop: 28,
-        }}
-      >
-        A tiny pixel-art sailing game.
-      </div>
-      <div
-        style={{
-          color: "rgba(233, 246, 249, 0.7)",
-          display: "flex",
-          fontSize: 30,
-          marginTop: 20,
-          textAlign: "center",
-        }}
-      >
-        Learn the wind, the no-go zone, tacking and gybing.
-      </div>
-    </div>,
-    { ...size }
-  );
+  return renderZoneOgImage({
+    badge: "TILLER",
+    eyebrow: "blode.co/tiller",
+    // Deliberately shorter than the meta description, which runs long for the
+    // SERP. A card is read in a feed, at a glance.
+    subtitle: "Seven levels on wind, the no-go zone, tacking and gybing.",
+    title: siteTitle,
+  });
 }
