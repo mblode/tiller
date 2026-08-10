@@ -14,9 +14,11 @@ export function CraftedBy() {
         className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         <span>Crafted by</span>
+        {/* Decorative: the link's own text already reads "Matthew Blode", so
+            any alt makes the accessible name say it twice. */}
         <img
           src="/tiller/avatar-sm.png"
-          alt="Matthew Blode"
+          alt=""
           width={20}
           height={20}
           loading="lazy"
