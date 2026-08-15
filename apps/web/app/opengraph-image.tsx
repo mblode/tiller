@@ -1,4 +1,5 @@
 import { renderZoneOgImage } from "@/app/og-image-shared";
+import { OgLogo } from "@/app/og-logo";
 import { siteTitle } from "@/lib/site";
 
 export {
@@ -20,11 +21,9 @@ export { siteTitle as alt } from "@/lib/site";
  */
 export default function OpengraphImage() {
   return renderZoneOgImage({
-    badge: "TILLER",
-    eyebrow: "blode.co/tiller",
-    // Deliberately shorter than the meta description, which runs long for the
-    // SERP. A card is read in a feed, at a glance.
-    subtitle: "Seven levels on wind, the no-go zone, tacking and gybing.",
+    background: "#0c4a6e",
+    color: "#f0f9ff",
+    logo: <OgLogo />,
     title: siteTitle,
   });
 }
