@@ -1,4 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "npm install --package-lock=false --prefix=../.."
+  "installCommand": "npm install --package-lock=false --prefix=../..",
+  "ignoreCommand": "if [ \"$VERCEL_ENV\" = \"preview\" ]; then exit 0; fi; npx turbo-ignore"
 }
