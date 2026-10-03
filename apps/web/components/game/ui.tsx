@@ -53,7 +53,7 @@ export function Stars({
 
 /** Chunky arcade button. One `primary` (brass) per surface; the rest secondary
  *  (beveled panel) or ghost (outline). 48px tall to clear the touch-target min.
- *  `font-pixel` is set here rather than inherited: the page sans is Glide, which
+ *  `font-pixel` is set here rather than inherited: the page sans is Inter, which
  *  is the right face for a sentence and the wrong one for an arcade CTA. */
 export function PixelButton({
   children,
