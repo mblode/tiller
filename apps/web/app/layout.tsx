@@ -1,25 +1,22 @@
 import { Agentation } from "agentation";
 import { GeistPixelSquare } from "geist/font/pixel";
 import type { Metadata } from "next";
-import localFont from "next/font/local";
+import { Inter } from "next/font/google";
 
 import { CraftedBy } from "@/components/crafted-by";
 import { siteDescription, siteTitle, siteUrl } from "@/lib/site";
 
 import "./globals.css";
 
-// Glide reads the prose: the how-to steps and the glossary definitions are
+// Inter reads the prose: the how-to steps and the glossary definitions are
 // sentences, and a pixel face is the wrong tool for a paragraph. Geist Pixel
 // Square stays on for everything the game labels (`font-pixel`), which is where
 // the arcade art direction lives.
-const glide = localFont({
+const inter = Inter({
   display: "swap",
-  src: [
-    { path: "./fonts/glide-variable.woff2", style: "normal" },
-    { path: "./fonts/glide-variable-italic.woff2", style: "italic" },
-  ],
-  variable: "--font-glide",
-  weight: "100 950",
+  style: ["normal", "italic"],
+  subsets: ["latin"],
+  variable: "--font-inter",
 });
 export const metadata: Metadata = {
   alternates: {
@@ -72,7 +69,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${glide.variable} ${GeistPixelSquare.variable} h-full antialiased`}
+      className={`${inter.variable} ${GeistPixelSquare.variable} h-full antialiased`}
     >
       <head>
         <link href={process.env.NEXT_PUBLIC_POSTHOG_HOST} rel="preconnect" />
